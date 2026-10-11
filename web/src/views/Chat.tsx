@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Hash, LogOut, Moon, PanelRight, PanelRightClose, Sun, Volume2 } from "lucide-react";
+import { Hash, LogOut, Moon, Settings, Sun, Users, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
+import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
 import { useVoice } from "../lib/voice";
 import type { Channel, Message, User, UserSummary, WSEvent } from "../lib/types";
 import ChatPane from "../components/ChatPane";
+import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
 import UserList from "../components/UserList";
 import VoiceRoom from "../components/VoiceRoom";
+
+type Panel = "users" | "settings" | null;
 
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -16,9 +20,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
-  const [showUsers, setShowUsers] = useState(true);
+  const [panel, setPanel] = useState<Panel>("users");
   const selectedId = useRef<number | null>(null);
-  const voice = useVoice();
+  const { settings, update } = useSettings();
+  const voice = useVoice(settings);
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
@@ -95,10 +100,18 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => setShowUsers((v) => !v)}
+              onClick={() => setPanel((p) => (p === "settings" ? null : "settings"))}
+              title="settings"
+            >
+              <Settings />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setPanel((p) => (p === "users" ? null : "users"))}
               title="toggle users"
             >
-              {showUsers ? <PanelRightClose /> : <PanelRight />}
+              <Users />
             </Button>
             <Button variant="ghost" size="icon-sm" onClick={logout} title="log out">
               <LogOut />
@@ -111,7 +124,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           <ChatPane channel={selected} messages={messages} />
         )}
       </main>
-      {showUsers && <UserList users={users} online={online} />}
+      {panel === "settings" && <SettingsPanel settings={settings} update={update} />}
+      {panel === "users" && <UserList users={users} online={online} />}
     </div>
   );
 }
