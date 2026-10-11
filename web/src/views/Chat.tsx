@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Hash, LogOut, Moon, Settings, Sun, Users, Volume2 } from "lucide-react";
+import { Hash, LogOut, Moon, Settings, Sun, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
 import { useSettings } from "../lib/settings";
@@ -10,7 +10,6 @@ import ChatPane from "../components/ChatPane";
 import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
 import UserList from "../components/UserList";
-import VoiceRoom from "../components/VoiceRoom";
 
 type Panel = "users" | "settings" | null;
 
@@ -74,21 +73,20 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   return (
     <div className="flex h-full">
-      <Sidebar channels={channels} selected={selected} onSelect={setSelected} voice={voice} />
+      <Sidebar
+        channels={channels}
+        selected={selected}
+        onSelect={setSelected}
+        voice={voice}
+        username={user.username}
+      />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-sepia/15 px-4 py-2">
           <span className="flex items-center gap-1.5 text-sm text-sepia/70">
-            {selected && (selected.type === "text" ? <Hash size={14} /> : <Volume2 size={14} />)}
+            {selected && <Hash size={14} />}
             {selected?.name}
           </span>
           <div className="flex items-center gap-1">
-            {voice.channel && (
-              <span className="flex items-center gap-1 pr-2 text-xs text-sepia/50">
-                <Volume2 size={12} />
-                {voice.channel.name}
-                {voice.muted ? " · muted" : ""}
-              </span>
-            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -118,11 +116,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             </Button>
           </div>
         </header>
-        {selected?.type === "voice" ? (
-          <VoiceRoom channel={selected} username={user.username} voice={voice} />
-        ) : (
-          <ChatPane channel={selected} messages={messages} />
-        )}
+        <ChatPane channel={selected} messages={messages} />
       </main>
       {panel === "settings" && <SettingsPanel settings={settings} update={update} />}
       {panel === "users" && <UserList users={users} online={online} />}

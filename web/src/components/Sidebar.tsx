@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
 import type { Channel } from "../lib/types";
 import type { Voice } from "../lib/voice";
+import VoicePeers from "./VoicePeers";
 
 interface Invite {
   token: string;
@@ -15,11 +16,13 @@ export default function Sidebar({
   selected,
   onSelect,
   voice,
+  username,
 }: {
   channels: Channel[];
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   voice: Voice;
+  username: string;
 }) {
   const [label, setLabel] = useState("create invite");
 
@@ -50,13 +53,7 @@ export default function Sidebar({
           {channels
             .filter((c) => c.type === "voice")
             .map((c) => (
-              <VoiceChannel
-                key={c.id}
-                channel={c}
-                selected={selected}
-                onSelect={onSelect}
-                voice={voice}
-              />
+              <VoiceChannel key={c.id} channel={c} voice={voice} username={username} />
             ))}
         </div>
       </nav>
@@ -108,38 +105,21 @@ function Group({
 
 function VoiceChannel({
   channel,
-  selected,
-  onSelect,
   voice,
+  username,
 }: {
   channel: Channel;
-  selected: Channel | null;
-  onSelect: (c: Channel) => void;
   voice: Voice;
+  username: string;
 }) {
   const active = voice.channel?.id === channel.id;
   return (
     <div className="pb-1">
-      <Button
-        variant={selected?.id === channel.id ? "secondary" : "ghost"}
-        onClick={() => onSelect(channel)}
-        className="w-full justify-start gap-2 font-normal"
-      >
+      <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-sepia/70">
         <Volume2 size={14} />
-        {channel.name}
-      </Button>
-      <div className="flex items-center gap-1 px-2 pt-0.5">
-        {active ? (
+        <span className="flex-1 truncate">{channel.name}</span>
+        {active && (
           <>
-            <span className="min-w-0 flex-1 truncate text-xs text-sepia/50">
-              {voice.status === "connecting"
-                ? "connecting…"
-                : voice.error
-                  ? voice.error
-                  : voice.muted
-                    ? "in voice · muted"
-                    : "in voice"}
-            </span>
             <Button
               size="icon-xs"
               variant="ghost"
@@ -152,7 +132,21 @@ function VoiceChannel({
               <PhoneOff />
             </Button>
           </>
-        ) : (
+        )}
+      </div>
+      {active && (
+        <div className="flex flex-col gap-0.5 px-2 pb-0.5">
+          {voice.status !== "live" ? (
+            <span className="truncate text-xs text-sepia/50">
+              {voice.status === "connecting" ? "connecting…" : voice.error || "disconnected"}
+            </span>
+          ) : (
+            <VoicePeers voice={voice} username={username} />
+          )}
+        </div>
+      )}
+      {!active && (
+        <div className="px-2 pt-0.5">
           <Button
             size="xs"
             variant="ghost"
@@ -161,8 +155,8 @@ function VoiceChannel({
           >
             join
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

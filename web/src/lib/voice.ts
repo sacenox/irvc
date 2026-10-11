@@ -50,6 +50,7 @@ export interface Voice {
   join: (c: Channel) => void;
   leave: () => void;
   toggleMute: () => void;
+  setPeerVolume: (name: string, volume: number) => void;
 }
 
 // useVoice owns the single LiveKit connection for the session so it survives
@@ -181,6 +182,14 @@ export function useVoice(settings: Settings): Voice {
     setMuted(next);
   }, [muted]);
 
+  const setPeerVolume = useCallback((name: string, volume: number) => {
+    const room = roomRef.current;
+    if (!room) return;
+    for (const p of room.remoteParticipants.values()) {
+      if ((p.name || p.identity) === name) p.setVolume(volume);
+    }
+  }, []);
+
   useEffect(
     () => () => {
       roomRef.current?.disconnect();
@@ -188,5 +197,5 @@ export function useVoice(settings: Settings): Voice {
     [],
   );
 
-  return { channel, status, error, peers, muted, join, leave, toggleMute };
+  return { channel, status, error, peers, muted, join, leave, toggleMute, setPeerVolume };
 }

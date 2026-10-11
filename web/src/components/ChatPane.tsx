@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -31,13 +32,30 @@ export default function ChatPane({
   messages: Message[];
 }) {
   const [body, setBody] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView();
+  // Jump to the bottom on channel switch, regardless of prior position.
+  useLayoutEffect(() => {
+    stickRef.current = true;
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [channel]);
+
+  // Follow new messages only while the user is pinned to the bottom. Layout
+  // effect so the initial history scrolls before the browser can unpin us.
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  function onScroll() {
+    const el = listRef.current;
+    if (!el) return;
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  }
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -107,19 +125,27 @@ export default function ChatPane({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        {messages.map((m) => (
-          <div key={m.id} className="flex gap-1.5 py-0.5 text-sm leading-6">
-            <span className="shrink-0">
-              <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
-              <span className="text-gold/90">{m.username}</span>
-            </span>
-            <div className={bodyClass}>
-              <Markdown text={m.body} />
+      <div ref={listRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {messages.map((m) => {
+          const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
+          return (
+            <div key={m.id} className="flex gap-1.5 py-0.5 text-sm leading-6">
+              <span className="shrink-0">
+                <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
+                {!action && <span className="text-gold/90">{m.username}</span>}
+              </span>
+              {action ? (
+                <div className="min-w-0 flex-1 break-words italic text-gold/90">
+                  * {m.username} {action}
+                </div>
+              ) : (
+                <div className={bodyClass}>
+                  <Markdown text={m.body} />
+                </div>
+              )}
             </div>
-          </div>
-        ))}
-        <div ref={endRef} />
+          );
+        })}
       </div>
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-sepia/15 p-3">
         <input
