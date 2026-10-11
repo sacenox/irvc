@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LogOut, PanelRight, PanelRightClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
+import { useVoice } from "../lib/voice";
 import type { Channel, Message, User, UserSummary, WSEvent } from "../lib/types";
 import ChatPane from "../components/ChatPane";
 import Sidebar from "../components/Sidebar";
@@ -16,6 +17,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [messages, setMessages] = useState<Message[]>([]);
   const [showUsers, setShowUsers] = useState(true);
   const selectedId = useRef<number | null>(null);
+  const voice = useVoice();
 
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
@@ -64,13 +66,19 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   return (
     <div className="flex h-full">
-      <Sidebar channels={channels} selected={selected} onSelect={setSelected} />
+      <Sidebar channels={channels} selected={selected} onSelect={setSelected} voice={voice} />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-sepia/15 px-4 py-2">
           <span className="text-sm text-sepia/70">
             {selected ? `${selected.type === "text" ? "#" : "🔊"} ${selected.name}` : ""}
           </span>
           <div className="flex items-center gap-1">
+            {voice.channel && (
+              <span className="pr-2 text-xs text-sepia/50">
+                🔊 {voice.channel.name}
+                {voice.muted ? " · muted" : ""}
+              </span>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -85,7 +93,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           </div>
         </header>
         {selected?.type === "voice" ? (
-          <VoiceRoom channel={selected} username={user.username} />
+          <VoiceRoom channel={selected} username={user.username} voice={voice} />
         ) : (
           <ChatPane channel={selected} messages={messages} />
         )}
