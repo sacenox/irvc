@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { SendHorizontal } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import { Paperclip, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api } from "../lib/api";
+import { api, upload } from "../lib/api";
 import type { Channel, Message } from "../lib/types";
 import Markdown from "./Markdown";
 
@@ -26,6 +33,7 @@ export default function ChatPane({
   const [body, setBody] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView();
@@ -37,6 +45,35 @@ export default function ChatPane({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, maxInputHeight)}px`;
   }, [body]);
+
+  function insert(text: string) {
+    const el = textareaRef.current;
+    if (!el) {
+      setBody((b) => b + text);
+      return;
+    }
+    const { selectionStart: start, selectionEnd: end } = el;
+    setBody((b) => b.slice(0, start) + text + b.slice(end));
+  }
+
+  async function attach(files: File[]) {
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      try {
+        const { url } = await upload(file);
+        insert(`![${file.name}](${url})\n`);
+      } catch {
+        // ignore failed uploads
+      }
+    }
+  }
+
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
+    e.preventDefault();
+    attach(images);
+  }
 
   async function send() {
     const text = body.trim();
@@ -85,6 +122,26 @@ export default function ChatPane({
         <div ref={endRef} />
       </div>
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-sepia/15 p-3">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            attach([...(e.target.files ?? [])]);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          title="attach image"
+          onClick={() => fileRef.current?.click()}
+        >
+          <Paperclip />
+        </Button>
         <textarea
           ref={textareaRef}
           rows={1}
@@ -92,6 +149,7 @@ export default function ChatPane({
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           className="max-h-[200px] w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-1 text-base leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
         />
         <Button type="submit" size="icon" title="send">

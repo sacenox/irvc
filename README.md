@@ -41,6 +41,8 @@ Secrets come from the shell env:
 | `IRVC_LIVEKIT_URL` | — | e.g. `wss://livekit.example.com` (browser-facing) |
 | `IRVC_LIVEKIT_API_KEY` | — | must match livekit-server |
 | `IRVC_LIVEKIT_SECRET` | — | must match livekit-server |
+| `IRVC_MEDIA_DIR` | `media` | uploaded image storage, the only other state |
+| `IRVC_MAX_UPLOAD` | `8388608` | max image upload bytes |
 
 Voice is disabled if the LiveKit vars are unset.
 

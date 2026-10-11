@@ -1,6 +1,9 @@
 package main
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 type Config struct {
 	ListenAddr    string
@@ -9,6 +12,8 @@ type Config struct {
 	LiveKitURL    string
 	LiveKitKey    string
 	LiveKitSecret string
+	MediaDir      string
+	MaxUpload     int64
 }
 
 func LoadConfig() *Config {
@@ -19,7 +24,17 @@ func LoadConfig() *Config {
 		LiveKitURL:    env("IRVC_LIVEKIT_URL", ""),
 		LiveKitKey:    env("IRVC_LIVEKIT_API_KEY", ""),
 		LiveKitSecret: env("IRVC_LIVEKIT_SECRET", ""),
+		MediaDir:      env("IRVC_MEDIA_DIR", "media"),
+		MaxUpload:     envInt("IRVC_MAX_UPLOAD", 8<<20),
 	}
+}
+
+func envInt(key string, def int64) int64 {
+	v, err := strconv.ParseInt(os.Getenv(key), 10, 64)
+	if err != nil || v <= 0 {
+		return def
+	}
+	return v
 }
 
 func env(key, def string) string {

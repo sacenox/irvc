@@ -49,6 +49,9 @@ func runServer(cfg *Config, db *sql.DB) {
 	if cfg.SessionSecret == "" {
 		log.Fatal("IRVC_SESSION_SECRET is required")
 	}
+	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
+		log.Fatalf("media dir: %v", err)
+	}
 	s := &Server{cfg: cfg, db: db, hub: newHub(db)}
 
 	r := gin.Default()
@@ -69,6 +72,8 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.POST("/channels/:id/messages", s.handleSendMessage)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
 	authed.POST("/invites", s.handleCreateInvite)
+	authed.POST("/upload", s.handleUpload)
+	authed.GET("/media/:name", s.handleMedia)
 	authed.GET("/ws", s.handleWS)
 
 	serveFrontend(r)
