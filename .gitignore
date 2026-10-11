@@ -1,0 +1,14 @@
+# Go
+/irvc
+*.exe
+*.test
+*.out
+
+# Node
+node_modules/
+web/dist/
+
+# Env
+.env
+.env.*
+!.env.example
