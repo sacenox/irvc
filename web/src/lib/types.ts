@@ -29,4 +29,5 @@ export interface WSEvent {
   type: "message" | "presence";
   message?: Message;
   users?: string[];
+  roster?: UserSummary[];
 }

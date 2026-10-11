@@ -1,8 +1,14 @@
-import type { ReactNode } from "react";
-import { Hash, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Hash, Mic, MicOff, PhoneOff, UserPlus, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "../lib/api";
 import type { Channel } from "../lib/types";
 import type { Voice } from "../lib/voice";
+
+interface Invite {
+  token: string;
+  expiresAt: number;
+}
 
 export default function Sidebar({
   channels,
@@ -15,6 +21,19 @@ export default function Sidebar({
   onSelect: (c: Channel) => void;
   voice: Voice;
 }) {
+  const [label, setLabel] = useState("create invite");
+
+  async function invite() {
+    try {
+      const { token } = await api<Invite>("/invites", { method: "POST" });
+      await navigator.clipboard.writeText(`${window.location.origin}/join?token=${token}`);
+      setLabel("copied!");
+    } catch {
+      setLabel("failed");
+    }
+    setTimeout(() => setLabel("create invite"), 1500);
+  }
+
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-sepia/15">
       <div className="px-4 py-3 text-sm font-semibold text-gold">irvc</div>
@@ -41,6 +60,17 @@ export default function Sidebar({
             ))}
         </div>
       </nav>
+      <div className="p-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 font-normal text-sepia/50"
+          onClick={invite}
+        >
+          <UserPlus size={14} />
+          {label}
+        </Button>
+      </div>
     </aside>
   );
 }

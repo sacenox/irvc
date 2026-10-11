@@ -44,6 +44,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       const ev = JSON.parse(e.data as string) as WSEvent;
       if (ev.type === "presence") {
         setOnline(new Set(ev.users ?? []));
+        if (ev.roster) setUsers(ev.roster);
       } else if (ev.message && ev.message.channelId === selectedId.current) {
         setMessages((prev) => [...prev, ev.message!]);
       }

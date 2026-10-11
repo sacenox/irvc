@@ -279,6 +279,20 @@ func (s *Server) handleInviteInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"valid": true})
 }
 
+func (s *Server) handleCreateInvite(c *gin.Context) {
+	user := c.MustGet("user").(User)
+	token := randToken()
+	expires := time.Now().Add(inviteTTL).Unix()
+	if _, err := s.db.Exec(
+		`INSERT INTO invites (token, created_by, expires_at) VALUES (?, ?, ?)`,
+		token, user.ID, expires,
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": token, "expiresAt": expires})
+}
+
 type rateLimiter struct {
 	mu     sync.Mutex
 	hits   map[string][]time.Time

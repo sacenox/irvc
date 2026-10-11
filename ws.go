@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -13,9 +14,10 @@ import (
 )
 
 type event struct {
-	Type    string   `json:"type"`
-	Message *Message `json:"message,omitempty"`
-	Users   []string `json:"users,omitempty"`
+	Type    string        `json:"type"`
+	Message *Message      `json:"message,omitempty"`
+	Users   []string      `json:"users,omitempty"`
+	Roster  []userSummary `json:"roster,omitempty"`
 }
 
 type client struct {
@@ -29,10 +31,11 @@ type client struct {
 type hub struct {
 	mu      sync.Mutex
 	clients map[int64]map[*client]bool
+	db      *sql.DB
 }
 
-func newHub() *hub {
-	return &hub{clients: map[int64]map[*client]bool{}}
+func newHub(db *sql.DB) *hub {
+	return &hub{clients: map[int64]map[*client]bool{}, db: db}
 }
 
 func (h *hub) register(c *client) {
@@ -92,8 +95,25 @@ func (h *hub) broadcast(ev event) {
 	}
 }
 
+func (h *hub) roster() []userSummary {
+	rows, err := h.db.Query(`SELECT id, username FROM users ORDER BY username`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	users := []userSummary{}
+	for rows.Next() {
+		var u userSummary
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return users
+		}
+		users = append(users, u)
+	}
+	return users
+}
+
 func (h *hub) broadcastPresence() {
-	h.broadcast(event{Type: "presence", Users: h.users()})
+	h.broadcast(event{Type: "presence", Users: h.users(), Roster: h.roster()})
 }
 
 var upgrader = websocket.Upgrader{

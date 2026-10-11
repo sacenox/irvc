@@ -49,7 +49,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	if cfg.SessionSecret == "" {
 		log.Fatal("IRVC_SESSION_SECRET is required")
 	}
-	s := &Server{cfg: cfg, db: db, hub: newHub()}
+	s := &Server{cfg: cfg, db: db, hub: newHub(db)}
 
 	r := gin.Default()
 	loginLimiter := newRateLimiter(10, time.Minute)
@@ -68,6 +68,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.GET("/channels/:id/messages", s.handleMessages)
 	authed.POST("/channels/:id/messages", s.handleSendMessage)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
+	authed.POST("/invites", s.handleCreateInvite)
 	authed.GET("/ws", s.handleWS)
 
 	serveFrontend(r)
