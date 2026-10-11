@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { LogOut, PanelRight, PanelRightClose } from "lucide-react";
+import { Hash, LogOut, Moon, PanelRight, PanelRightClose, Sun, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
+import { useTheme } from "../lib/theme";
 import { useVoice } from "../lib/voice";
 import type { Channel, Message, User, UserSummary, WSEvent } from "../lib/types";
 import ChatPane from "../components/ChatPane";
@@ -18,6 +19,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [showUsers, setShowUsers] = useState(true);
   const selectedId = useRef<number | null>(null);
   const voice = useVoice();
+  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
@@ -69,16 +71,26 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       <Sidebar channels={channels} selected={selected} onSelect={setSelected} voice={voice} />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-sepia/15 px-4 py-2">
-          <span className="text-sm text-sepia/70">
-            {selected ? `${selected.type === "text" ? "#" : "🔊"} ${selected.name}` : ""}
+          <span className="flex items-center gap-1.5 text-sm text-sepia/70">
+            {selected && (selected.type === "text" ? <Hash size={14} /> : <Volume2 size={14} />)}
+            {selected?.name}
           </span>
           <div className="flex items-center gap-1">
             {voice.channel && (
-              <span className="pr-2 text-xs text-sepia/50">
-                🔊 {voice.channel.name}
+              <span className="flex items-center gap-1 pr-2 text-xs text-sepia/50">
+                <Volume2 size={12} />
+                {voice.channel.name}
                 {voice.muted ? " · muted" : ""}
               </span>
             )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={toggle}
+              title={theme === "dark" ? "light mode" : "dark mode"}
+            >
+              {theme === "dark" ? <Sun /> : <Moon />}
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
