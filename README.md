@@ -1,7 +1,8 @@
 # IRVC — Internet Relay Voice Chat
 
 A WebRTC-powered text and voice chat. Private, self-hosted, personal server.
-See [irvc.md](./irvc.md) for the design.
+See [irvc.md](./irvc.md) for the design and [DEPLOY.md](./DEPLOY.md) for the
+deployment runbook.
 
 ## Architecture
 

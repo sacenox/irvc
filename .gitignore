@@ -12,3 +12,10 @@ web/dist/
 .env
 .env.*
 !.env.example
+/deploy/irvc.env
+/deploy/livekit.yaml
+
+# Runtime state
+/irvc.db
+/irvc.db-shm
+/irvc.db-wal

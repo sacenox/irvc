@@ -7,3 +7,9 @@ With the lack of ownership of data, and more and more "enshitification" of these
 the need is rising for a private self hosted instance of this.
 
 This is ours.
+
+## Docs
+
+- `README.md` — build, configuration, invites, run.
+- `irvc.md` — design.
+- `DEPLOY.md` — runbook for the VPS deployment.

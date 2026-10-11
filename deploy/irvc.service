@@ -1,0 +1,15 @@
+[Unit]
+Description=IRVC (Internet Relay Voice Chat)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/home/user/repos/irvc
+ExecStart=/home/user/repos/irvc/irvc
+EnvironmentFile=/etc/irvc.env
+User=user
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

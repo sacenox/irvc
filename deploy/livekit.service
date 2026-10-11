@@ -1,0 +1,13 @@
+[Unit]
+Description=LiveKit server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/livekit-server --config /etc/livekit.yaml
+User=user
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
