@@ -16,6 +16,21 @@ interface VoiceToken {
   room: string;
 }
 
+// beep plays a short tone for call roster changes (someone joined or left the
+// call you are in). Web Audio needs no asset; it unlocks on the click that
+// joined the call.
+function beep(freq: number) {
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  gain.gain.value = 0.1;
+  osc.frequency.value = freq;
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.12);
+  osc.onended = () => ctx.close();
+}
+
 // dbfs computes the RMS level, in dBFS, of an analyser's latest time-domain
 // samples. Near-silence clamps toward -inf via the epsilon.
 function dbfs(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>): number {
@@ -194,6 +209,7 @@ export function useVoice(
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement[]>([]);
   const genRef = useRef(0);
+  const readyRef = useRef(false);
   const settingsRef = useRef(settings);
   const mutedRef = useRef(false);
   const appliedRef = useRef("");
@@ -213,6 +229,7 @@ export function useVoice(
     const room = roomRef.current;
     roomRef.current = null;
     appliedRef.current = "";
+    readyRef.current = false;
     audioRef.current.forEach((el) => el.remove());
     audioRef.current = [];
     room?.disconnect();
@@ -242,8 +259,14 @@ export function useVoice(
         roomRef.current = room;
         const sync = () =>
           setPeers([...room.remoteParticipants.values()].map((p) => p.name || p.identity));
-        room.on(RoomEvent.ParticipantConnected, sync);
-        room.on(RoomEvent.ParticipantDisconnected, sync);
+        room.on(RoomEvent.ParticipantConnected, () => {
+          if (readyRef.current && settingsRef.current.joinSound) beep(660);
+          sync();
+        });
+        room.on(RoomEvent.ParticipantDisconnected, () => {
+          if (readyRef.current && settingsRef.current.joinSound) beep(440);
+          sync();
+        });
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) =>
           setSpeaking(speakers.map((p) => p.name || p.identity)),
         );
@@ -265,6 +288,9 @@ export function useVoice(
           room.disconnect();
           return;
         }
+        // Existing participants fired ParticipantConnected during connect; only
+        // later connect/disconnect events should beep.
+        readyRef.current = true;
         const mic = await room.localParticipant.setMicrophoneEnabled(true, capture(s), publish(s));
         if (mic?.audioTrack) await mic.audioTrack.setProcessor(gate.processor);
         if (s.speakerDeviceId) {

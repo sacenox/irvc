@@ -69,7 +69,7 @@ export default function SettingsPanel({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
-        <Group label="Appearance">
+        <Group label="User preferences">
           <Field label="theme">
             <Select
               value={theme}
@@ -90,6 +90,14 @@ export default function SettingsPanel({
               ]}
             />
           </Field>
+        </Group>
+
+        <Group label="Sounds">
+          <Toggle
+            label="join/leave sound"
+            value={settings.joinSound}
+            onChange={(v) => update({ joinSound: v })}
+          />
         </Group>
 
         <Group label="Voice">

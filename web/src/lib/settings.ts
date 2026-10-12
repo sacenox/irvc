@@ -20,6 +20,7 @@ export interface Settings {
   speakerDeviceId: string;
   deafened: boolean;
   gateThreshold: number;
+  joinSound: boolean;
   fontSize: FontSize;
 }
 
@@ -33,6 +34,7 @@ export const defaultSettings: Settings = {
   speakerDeviceId: "",
   deafened: false,
   gateThreshold: -60,
+  joinSound: true,
   fontSize: "default",
 };
 
