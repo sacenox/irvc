@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,12 +20,75 @@ type Server struct {
 	hub *hub
 }
 
+// usage prints out human readable usage for fs
+func usage(fs *flag.FlagSet) func() {
+	return func() {
+		w := fs.Output()
+		fmt.Fprint(w, `irvc - self-hosted WebRTC text and voice chat
+
+Usage:
+  irvc [flags]           run the server
+  irvc [flags] invite    create an invite and print its token
+
+Flags:
+`)
+		printFlags(fs)
+		fmt.Fprint(w, `
+Secrets are read from the environment only:
+  IRVC_SESSION_SECRET     signs sessions (required to run the server)
+  IRVC_LIVEKIT_API_KEY    LiveKit API key
+  IRVC_LIVEKIT_SECRET     LiveKit API secret
+
+See README.md for details.
+`)
+	}
+}
+
+// printFlags prints defaults like flag.PrintDefaults, but with GNU-style "--long" names
+func printFlags(fs *flag.FlagSet) {
+	fs.VisitAll(func(f *flag.Flag) {
+		name, usage := flag.UnquoteUsage(f)
+		head := "  --" + f.Name
+		if name != "" {
+			head += " " + name
+		}
+		if f.DefValue != "" && f.DefValue != "0" {
+			usage += fmt.Sprintf(" (default: %s)", f.DefValue)
+		}
+		fmt.Fprintf(fs.Output(), "%s\n    \t%s\n", head, usage)
+	})
+}
+
 func main() {
 	cfg := LoadConfig()
+
+	// flags parsed before db/secret check so that --help always works
+	fs := flag.NewFlagSet("irvc", flag.ExitOnError)
+	fs.Usage = usage(fs)
+	fs.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "IRVC_LISTEN_ADDR, address to listen on")
+	fs.StringVar(&cfg.DBPath, "db", cfg.DBPath, "IRVC_DB_PATH, path to the SQLite database")
+	fs.StringVar(&cfg.MediaDir, "media-dir", cfg.MediaDir, "IRVC_MEDIA_DIR, directory for uploaded media")
+	fs.Int64Var(&cfg.MaxUpload, "max-upload", cfg.MaxUpload, "IRVC_MAX_UPLOAD, max upload size in bytes")
+	fs.StringVar(&cfg.LiveKitURL, "livekit-url", cfg.LiveKitURL, "IRVC_LIVEKIT_URL, LiveKit server URL for voice chat")
+	genSecret := fs.Bool("gen-secret", false, "generate a random session secret, print it and exit")
+	fs.Parse(os.Args[1:])
+
+	if *genSecret {
+		fmt.Println(randToken())
+		return
+	}
+
+	cmd := fs.Arg(0)
+	if cmd != "" && cmd != "invite" {
+		fmt.Fprintf(fs.Output(), "unknown command %q\n\n", cmd)
+		fs.Usage()
+		os.Exit(2)
+	}
+
 	db := OpenDB(cfg.DBPath)
 	defer db.Close()
 
-	if len(os.Args) > 1 && os.Args[1] == "invite" {
+	if cmd == "invite" {
 		makeInvite(db)
 		return
 	}
