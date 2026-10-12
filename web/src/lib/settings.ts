@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+export type FontSize = "default" | "large";
+
 export type AudioPresetName =
   | "telephone"
   | "speech"
@@ -18,6 +20,7 @@ export interface Settings {
   speakerDeviceId: string;
   deafened: boolean;
   gateThreshold: number;
+  fontSize: FontSize;
 }
 
 export const defaultSettings: Settings = {
@@ -30,6 +33,7 @@ export const defaultSettings: Settings = {
   speakerDeviceId: "",
   deafened: false,
   gateThreshold: -60,
+  fontSize: "default",
 };
 
 const key = "irvc.settings";

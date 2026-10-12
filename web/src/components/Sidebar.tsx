@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
 import type { Channel, UserSummary } from "../lib/types";
-import type { Theme } from "../lib/theme";
+import type { Mode } from "../lib/theme";
 import type { Voice } from "../lib/voice";
 import UserList from "./UserList";
 import VoicePeers from "./VoicePeers";
@@ -35,8 +35,8 @@ export default function Sidebar({
   username,
   users,
   online,
-  theme,
-  onToggleTheme,
+  mode,
+  onToggleMode,
   settingsOpen,
   onToggleSettings,
   onLogout,
@@ -49,8 +49,8 @@ export default function Sidebar({
   username: string;
   users: UserSummary[];
   online: Set<string>;
-  theme: Theme;
-  onToggleTheme: () => void;
+  mode: Mode;
+  onToggleMode: () => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
   onLogout: () => void;
@@ -120,10 +120,10 @@ export default function Sidebar({
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={onToggleTheme}
-            title={theme === "dark" ? "light mode" : "dark mode"}
+            onClick={onToggleMode}
+            title={mode === "dark" ? "light mode" : "dark mode"}
           >
-            {theme === "dark" ? <Sun /> : <Moon />}
+            {mode === "dark" ? <Sun /> : <Moon />}
           </Button>
           <Button
             variant={settingsOpen ? "secondary" : "ghost"}

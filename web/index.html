@@ -10,7 +10,9 @@
         if (t !== "light" && t !== "dark") {
           t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
-        document.documentElement.classList.toggle("dark", t === "dark");
+        var c = document.documentElement.classList;
+        c.toggle("dark", t === "dark");
+        c.toggle("theme-tuxedo", localStorage.getItem("irvc.theme") === "tuxedo");
       })();
     </script>
     <link

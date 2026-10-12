@@ -3,7 +3,8 @@ import { HeadphoneOff, Headphones } from "lucide-react";
 import { Room } from "livekit-client";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import type { AudioPresetName, Settings } from "../lib/settings";
+import type { AudioPresetName, FontSize, Settings } from "../lib/settings";
+import type { Theme } from "../lib/theme";
 import { useMicPreview, type Voice } from "../lib/voice";
 
 const minDb = -60;
@@ -49,10 +50,14 @@ export default function SettingsPanel({
   settings,
   update,
   voice,
+  theme,
+  onThemeChange,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
   voice: Voice;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
 }) {
   const mics = useDevices("audioinput");
   const speakers = useDevices("audiooutput");
@@ -64,6 +69,29 @@ export default function SettingsPanel({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
+        <Group label="Appearance">
+          <Field label="theme">
+            <Select
+              value={theme}
+              onChange={(v) => onThemeChange(v as Theme)}
+              options={[
+                { value: "80s-nicotine", label: "80s nicotine" },
+                { value: "tuxedo", label: "tuxedo" },
+              ]}
+            />
+          </Field>
+          <Field label="font size">
+            <Select
+              value={settings.fontSize}
+              onChange={(v) => update({ fontSize: v as FontSize })}
+              options={[
+                { value: "default", label: "default" },
+                { value: "large", label: "Help, I'm old" },
+              ]}
+            />
+          </Field>
+        </Group>
+
         <Group label="Voice">
           <Button
             variant={settings.deafened ? "secondary" : "ghost"}

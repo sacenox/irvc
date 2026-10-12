@@ -155,6 +155,83 @@ body {
   --sidebar-ring: #ffcc55;
 }
 
+/* tuxedo: grayscale white-to-black, same scale as the default. */
+.theme-tuxedo {
+  --bg: #ffffff;
+  --panel: #f2f2f2;
+  --sepia: #1a1a1a;
+  --gold: #4d4d4d;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #f2f2f2;
+  --card-foreground: #1a1a1a;
+  --popover: #f2f2f2;
+  --popover-foreground: #1a1a1a;
+  --primary: #4d4d4d;
+  --primary-foreground: #ffffff;
+  --secondary: #e6e6e6;
+  --secondary-foreground: #1a1a1a;
+  --muted: #e6e6e6;
+  --muted-foreground: #6b6b6b;
+  --accent: #d9d9d9;
+  --accent-foreground: #0d0d0d;
+  --destructive: #404040;
+  --border: #d9d9d9;
+  --input: #d9d9d9;
+  --ring: #4d4d4d;
+  --chart-1: #4d4d4d;
+  --chart-2: #737373;
+  --chart-3: #1a1a1a;
+  --chart-4: #b3b3b3;
+  --chart-5: #d9d9d9;
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #4d4d4d;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e6e6e6;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #d9d9d9;
+  --sidebar-ring: #4d4d4d;
+}
+
+.dark.theme-tuxedo {
+  --bg: #000000;
+  --panel: #0d0d0d;
+  --sepia: #e6e6e6;
+  --gold: #bfbfbf;
+  --background: #000000;
+  --foreground: #e6e6e6;
+  --card: #0d0d0d;
+  --card-foreground: #e6e6e6;
+  --popover: #0d0d0d;
+  --popover-foreground: #e6e6e6;
+  --primary: #bfbfbf;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #e6e6e6;
+  --muted: #1a1a1a;
+  --muted-foreground: #808080;
+  --accent: #262626;
+  --accent-foreground: #cccccc;
+  --destructive: #8c8c8c;
+  --border: #262626;
+  --input: #262626;
+  --ring: #bfbfbf;
+  --chart-1: #bfbfbf;
+  --chart-2: #999999;
+  --chart-3: #737373;
+  --chart-4: #4d4d4d;
+  --chart-5: #262626;
+  --sidebar: #050505;
+  --sidebar-foreground: #e6e6e6;
+  --sidebar-primary: #bfbfbf;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #e6e6e6;
+  --sidebar-border: #262626;
+  --sidebar-ring: #bfbfbf;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

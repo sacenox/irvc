@@ -29,7 +29,11 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     }
   });
   const [voiceRooms, setVoiceRooms] = useState<Record<string, string[]>>({});
-  const { theme, toggle } = useTheme();
+  const { mode, toggleMode, theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = settings.fontSize === "large" ? "18px" : "";
+  }, [settings.fontSize]);
 
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
@@ -111,8 +115,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           username={user.username}
           users={users}
           online={online}
-          theme={theme}
-          onToggleTheme={toggle}
+          mode={mode}
+          onToggleMode={toggleMode}
           settingsOpen={settingsOpen}
           onToggleSettings={toggleSettings}
           onLogout={logout}
@@ -143,9 +147,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           </span>
         </header>
         {settingsOpen ? (
-          <SettingsPanel settings={settings} update={update} voice={voice} />
+          <SettingsPanel
+            settings={settings}
+            update={update}
+            voice={voice}
+            theme={theme}
+            onThemeChange={setTheme}
+          />
         ) : (
-          <ChatPane channel={selected} messages={messages} />
+          <ChatPane channel={selected} messages={messages} users={users} username={user.username} />
         )}
       </main>
     </div>
