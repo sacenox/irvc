@@ -31,6 +31,7 @@ export default function Sidebar({
   selected,
   onSelect,
   voice,
+  voiceRooms,
   username,
   users,
   online,
@@ -44,6 +45,7 @@ export default function Sidebar({
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   voice: Voice;
+  voiceRooms: Record<string, string[]>;
   username: string;
   users: UserSummary[];
   online: Set<string>;
@@ -83,7 +85,13 @@ export default function Sidebar({
           {channels
             .filter((c) => c.type === "voice")
             .map((c) => (
-              <VoiceChannel key={c.id} channel={c} voice={voice} username={username} />
+              <VoiceChannel
+                key={c.id}
+                channel={c}
+                voice={voice}
+                occupants={voiceRooms[String(c.id)] ?? []}
+                username={username}
+              />
             ))}
         </div>
         <div>
@@ -168,10 +176,12 @@ function Group({
 function VoiceChannel({
   channel,
   voice,
+  occupants,
   username,
 }: {
   channel: Channel;
   voice: Voice;
+  occupants: string[];
   username: string;
 }) {
   const active = voice.channel?.id === channel.id;
@@ -217,6 +227,15 @@ function VoiceChannel({
           >
             join
           </Button>
+        </div>
+      )}
+      {!active && occupants.length > 0 && (
+        <div className="flex flex-col gap-0.5 pb-0.5 pl-3.5 pr-2">
+          {occupants.map((name) => (
+            <span key={name} className="truncate text-xs text-sepia/70">
+              {name}
+            </span>
+          ))}
         </div>
       )}
     </div>

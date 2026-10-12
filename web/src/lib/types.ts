@@ -30,4 +30,5 @@ export interface WSEvent {
   message?: Message;
   users?: string[];
   roster?: UserSummary[];
+  voice?: Record<string, string[]>;
 }

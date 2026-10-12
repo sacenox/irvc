@@ -20,8 +20,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const desktop = useRef(window.matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const { settings, update } = useSettings();
-  const voice = useVoice(settings);
+  const voice = useVoice(settings, (channelId) => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "voice", channelId: channelId ?? 0 }));
+    }
+  });
+  const [voiceRooms, setVoiceRooms] = useState<Record<string, string[]>>({});
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
@@ -43,16 +50,21 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${window.location.host}/api/ws`);
+    wsRef.current = ws;
     ws.onmessage = (e) => {
       const ev = JSON.parse(e.data as string) as WSEvent;
       if (ev.type === "presence") {
         setOnline(new Set(ev.users ?? []));
         if (ev.roster) setUsers(ev.roster);
+        setVoiceRooms(ev.voice ?? {});
       } else if (ev.message && ev.message.channelId === selectedId.current) {
         setMessages((prev) => [...prev, ev.message!]);
       }
     };
-    return () => ws.close();
+    return () => {
+      wsRef.current = null;
+      ws.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -95,6 +107,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           selected={selected}
           onSelect={selectChannel}
           voice={voice}
+          voiceRooms={voiceRooms}
           username={user.username}
           users={users}
           online={online}

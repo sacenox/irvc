@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,16 +16,24 @@ import (
 )
 
 type event struct {
-	Type    string        `json:"type"`
-	Message *Message      `json:"message,omitempty"`
-	Users   []string      `json:"users,omitempty"`
-	Roster  []userSummary `json:"roster,omitempty"`
+	Type    string              `json:"type"`
+	Message *Message            `json:"message,omitempty"`
+	Users   []string            `json:"users,omitempty"`
+	Roster  []userSummary       `json:"roster,omitempty"`
+	Voice   map[string][]string `json:"voice,omitempty"`
+}
+
+// wsIn is a message sent from a client over the socket.
+type wsIn struct {
+	Type      string `json:"type"`
+	ChannelID int64  `json:"channelId"`
 }
 
 type client struct {
 	hub      *hub
 	userID   int64
 	username string
+	voiceID  int64
 	conn     *websocket.Conn
 	send     chan []byte
 }
@@ -31,11 +41,12 @@ type client struct {
 type hub struct {
 	mu      sync.Mutex
 	clients map[int64]map[*client]bool
+	voice   map[int64]map[int64]string
 	db      *sql.DB
 }
 
 func newHub(db *sql.DB) *hub {
-	return &hub{clients: map[int64]map[*client]bool{}, db: db}
+	return &hub{clients: map[int64]map[*client]bool{}, voice: map[int64]map[int64]string{}, db: db}
 }
 
 func (h *hub) register(c *client) {
@@ -56,8 +67,38 @@ func (h *hub) unregister(c *client) {
 			delete(h.clients, c.userID)
 		}
 	}
+	h.clearVoiceLocked(c)
 	h.mu.Unlock()
 	close(c.send)
+	h.broadcastPresence()
+}
+
+// clearVoiceLocked drops a client's voice occupancy. Caller holds h.mu.
+func (h *hub) clearVoiceLocked(c *client) {
+	if c.voiceID == 0 {
+		return
+	}
+	if set := h.voice[c.voiceID]; set != nil {
+		delete(set, c.userID)
+		if len(set) == 0 {
+			delete(h.voice, c.voiceID)
+		}
+	}
+	c.voiceID = 0
+}
+
+// setVoice moves a client into a voice channel (0 for none) and rebroadcasts.
+func (h *hub) setVoice(c *client, channelID int64) {
+	h.mu.Lock()
+	h.clearVoiceLocked(c)
+	c.voiceID = channelID
+	if channelID != 0 {
+		if h.voice[channelID] == nil {
+			h.voice[channelID] = map[int64]string{}
+		}
+		h.voice[channelID][c.userID] = c.username
+	}
+	h.mu.Unlock()
 	h.broadcastPresence()
 }
 
@@ -112,8 +153,28 @@ func (h *hub) roster() []userSummary {
 	return users
 }
 
+func (h *hub) voiceUsers() map[string][]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := map[string][]string{}
+	for channelID, set := range h.voice {
+		names := make([]string, 0, len(set))
+		for _, name := range set {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		out[strconv.FormatInt(channelID, 10)] = names
+	}
+	return out
+}
+
 func (h *hub) broadcastPresence() {
-	h.broadcast(event{Type: "presence", Users: h.users(), Roster: h.roster()})
+	h.broadcast(event{
+		Type:   "presence",
+		Users:  h.users(),
+		Roster: h.roster(),
+		Voice:  h.voiceUsers(),
+	})
 }
 
 var upgrader = websocket.Upgrader{
@@ -166,8 +227,16 @@ func (c *client) readPump() {
 		return nil
 	})
 	for {
-		if _, _, err := c.conn.ReadMessage(); err != nil {
+		_, msg, err := c.conn.ReadMessage()
+		if err != nil {
 			return
+		}
+		var in wsIn
+		if json.Unmarshal(msg, &in) != nil {
+			continue
+		}
+		if in.Type == "voice" {
+			c.hub.setVoice(c, in.ChannelID)
 		}
 	}
 }

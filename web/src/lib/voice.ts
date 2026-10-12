@@ -181,7 +181,10 @@ export interface Voice {
 // switching panes. Chat holds it and passes it to the sidebar controls.
 // Voice settings are read from a ref so `join` always uses the latest values,
 // while live changes (device, processing, quality) are applied via effects.
-export function useVoice(settings: Settings): Voice {
+export function useVoice(
+  settings: Settings,
+  onVoice?: (channelID: number | null) => void,
+): Voice {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState("");
@@ -195,8 +198,10 @@ export function useVoice(settings: Settings): Voice {
   const mutedRef = useRef(false);
   const appliedRef = useRef("");
   const gateRef = useRef<MicGate | null>(null);
+  const onVoiceRef = useRef(onVoice);
   settingsRef.current = settings;
   mutedRef.current = muted;
+  onVoiceRef.current = onVoice;
 
   if (!gateRef.current) gateRef.current = micGate();
   const gate = gateRef.current;
@@ -217,6 +222,7 @@ export function useVoice(settings: Settings): Voice {
     setPeers([]);
     setSpeaking([]);
     setMuted(false);
+    onVoiceRef.current?.(null);
   }, []);
 
   const join = useCallback(
@@ -266,6 +272,7 @@ export function useVoice(settings: Settings): Voice {
         }
         appliedRef.current = micSignature(s);
         setStatus("live");
+        onVoiceRef.current?.(c.id);
         sync();
       } catch (err) {
         if (gen !== genRef.current) return;
