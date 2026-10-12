@@ -23,6 +23,11 @@ function isMentioned(body: string, username: string) {
   return new RegExp(`(^|[^\\w-])@${username}(?![\\w-])`, "i").test(body);
 }
 
+// hasImage reports whether body contains a markdown image.
+function hasImage(body: string) {
+  return /!\[[^\]]*\]\([^)]+\)/.test(body);
+}
+
 // prose supplies the block-level markdown styling; the CSS vars retune its
 // palette to the sepia theme.
 const bodyClass =
@@ -44,6 +49,7 @@ export default function ChatPane({
   username: string;
 }) {
   const [body, setBody] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
     null,
   );
@@ -152,11 +158,28 @@ export default function ChatPane({
     attach(images);
   }
 
+  function toggleImage(id: number) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // /collapse collapses every image in the current channel.
+  function collapseAll() {
+    setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)));
+  }
+
   async function send() {
     const text = body.trim();
     if (!text || !channel) return;
     setBody("");
     setMention(null);
+    if (text === "/collapse") {
+      collapseAll();
+      return;
+    }
     try {
       await api(`/channels/${channel.id}/messages`, {
         method: "POST",
@@ -231,7 +254,11 @@ export default function ChatPane({
                   </div>
                 ) : (
                   <div className={bodyClass}>
-                    <Markdown text={m.body} />
+                    <Markdown
+                      text={m.body}
+                      collapsed={collapsed.has(m.id)}
+                      onToggle={() => toggleImage(m.id)}
+                    />
                   </div>
                 )}
               </div>
