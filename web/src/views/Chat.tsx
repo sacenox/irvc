@@ -32,7 +32,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const { mode, toggleMode, theme, setTheme } = useTheme();
 
   useEffect(() => {
-    document.documentElement.style.fontSize = settings.fontSize === "large" ? "18px" : "";
+    document.documentElement.style.fontSize =
+      { default: "", normal: "16px", large: "18px" }[settings.fontSize];
   }, [settings.fontSize]);
 
   useEffect(() => {

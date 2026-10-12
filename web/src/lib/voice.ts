@@ -260,11 +260,11 @@ export function useVoice(
         const sync = () =>
           setPeers([...room.remoteParticipants.values()].map((p) => p.name || p.identity));
         room.on(RoomEvent.ParticipantConnected, () => {
-          if (readyRef.current && settingsRef.current.joinSound) beep(660);
+          if (readyRef.current && settingsRef.current.joinSound) beep(440);
           sync();
         });
         room.on(RoomEvent.ParticipantDisconnected, () => {
-          if (readyRef.current && settingsRef.current.joinSound) beep(440);
+          if (readyRef.current && settingsRef.current.joinSound) beep(660);
           sync();
         });
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) =>

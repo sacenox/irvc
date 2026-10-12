@@ -85,7 +85,8 @@ export default function SettingsPanel({
               value={settings.fontSize}
               onChange={(v) => update({ fontSize: v as FontSize })}
               options={[
-                { value: "default", label: "default" },
+                { value: "normal", label: "normal" },
+                { value: "default", label: "browser default" },
                 { value: "large", label: "Help, I'm old" },
               ]}
             />

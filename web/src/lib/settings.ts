@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type FontSize = "default" | "large";
+// "normal" is our own pinned 16px default. "default" means the browser's root
+// font size, which the user may have changed. Old stored "default" values are
+// intentionally left as-is (no migration).
+export type FontSize = "default" | "normal" | "large";
 
 export type AudioPresetName =
   | "telephone"
@@ -35,7 +38,7 @@ export const defaultSettings: Settings = {
   deafened: false,
   gateThreshold: -60,
   joinSound: true,
-  fontSize: "default",
+  fontSize: "normal",
 };
 
 const key = "irvc.settings";
