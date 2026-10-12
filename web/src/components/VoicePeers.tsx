@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MicOff, Volume2, VolumeX } from "lucide-react";
-import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import Dot from "./Dot";
 import type { Voice } from "../lib/voice";
 
 const storageKey = "irvc.peerVolumes";
@@ -45,7 +45,7 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
 
   return (
     <>
-      <div className="flex items-center gap-1.5 text-xs text-sepia/70">
+      <div className="flex items-center gap-1.5 text-sm text-sepia/70">
         <Dot on={speaking.includes(username)} />
         {username} <span className="text-sepia/40">(you)</span>
         {selfMuted && <MicOff size={10} className="text-sepia/50" />}
@@ -54,7 +54,7 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
         <div key={p}>
           <button
             onClick={() => setOpen((o) => (o === p ? null : p))}
-            className="flex w-full items-center gap-1.5 text-left text-xs text-sepia/70 hover:text-sepia"
+            className="flex w-full items-center gap-1.5 text-left text-sm text-sepia/70 hover:text-sepia"
           >
             <Dot on={speaking.includes(p)} />
             {p}
@@ -88,11 +88,3 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
   );
 }
 
-// The dot stays dim until the participant is speaking, then lights up.
-function Dot({ on }: { on: boolean }) {
-  return (
-    <span
-      className={cn("h-1.5 w-1.5 rounded-full transition-colors", on ? "bg-gold" : "bg-sepia/25")}
-    />
-  );
-}

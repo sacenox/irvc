@@ -190,7 +190,7 @@ function VoiceChannel({
       <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-sepia/70">
         <Volume2 size={14} />
         <span className="flex-1 truncate">{channel.name}</span>
-        {active && (
+        {active ? (
           <>
             <Button
               size="icon-xs"
@@ -204,6 +204,15 @@ function VoiceChannel({
               <PhoneOff />
             </Button>
           </>
+        ) : (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="text-xs text-sepia/50"
+            onClick={() => voice.join(channel)}
+          >
+            join
+          </Button>
         )}
       </div>
       {active && (
@@ -217,22 +226,10 @@ function VoiceChannel({
           )}
         </div>
       )}
-      {!active && (
-        <div className="px-2 pt-0.5">
-          <Button
-            size="xs"
-            variant="ghost"
-            className="text-xs text-sepia/50"
-            onClick={() => voice.join(channel)}
-          >
-            join
-          </Button>
-        </div>
-      )}
       {!active && occupants.length > 0 && (
         <div className="flex flex-col gap-0.5 pb-0.5 pl-3.5 pr-2">
           {occupants.map((name) => (
-            <span key={name} className="truncate text-xs text-sepia/70">
+            <span key={name} className="truncate text-sm text-sepia/70">
               {name}
             </span>
           ))}

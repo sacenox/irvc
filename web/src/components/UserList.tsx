@@ -1,4 +1,5 @@
 import type { UserSummary } from "../lib/types";
+import Dot from "./Dot";
 
 export default function UserList({ users, online }: { users: UserSummary[]; online: Set<string> }) {
   const sorted = [...users].sort(
@@ -18,7 +19,7 @@ export default function UserList({ users, online }: { users: UserSummary[]; onli
               isOnline ? "text-sepia" : "text-sepia/35"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-gold" : "bg-sepia/25"}`} />
+            <Dot on={isOnline} />
             {u.username}
           </li>
         );
