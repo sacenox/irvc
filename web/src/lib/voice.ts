@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioPresets, Room, RoomEvent, Track } from "livekit-client";
-import type { AudioCaptureOptions } from "livekit-client";
+import type {
+  AudioCaptureOptions,
+  AudioProcessorOptions,
+  Participant,
+  TrackProcessor,
+} from "livekit-client";
 import { api } from "./api";
 import type { Settings } from "./settings";
 import type { Channel } from "./types";
@@ -9,6 +14,123 @@ interface VoiceToken {
   url: string;
   token: string;
   room: string;
+}
+
+// dbfs computes the RMS level, in dBFS, of an analyser's latest time-domain
+// samples. Near-silence clamps toward -inf via the epsilon.
+function dbfs(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>): number {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (const v of buf) sum += v * v;
+  return 20 * Math.log10(Math.sqrt(sum / buf.length) + 1e-8);
+}
+
+// A hard gate that keeps the microphone silent while its level is below the
+// user's threshold, so room noise and keyboard clatter are not transmitted.
+// The threshold lives in a ref, so the slider takes effect without republishing
+// the track. `level` reports dBFS for the settings meter.
+interface MicGate {
+  processor: TrackProcessor<Track.Kind.Audio, AudioProcessorOptions>;
+  threshold: { current: number };
+  level: () => number;
+}
+
+function micGate(): MicGate {
+  const threshold = { current: -60 };
+  const state = { level: -100 };
+  let timer = 0;
+
+  const processor: TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> = {
+    name: "irvc-mic-gate",
+    async init({ track, audioContext }) {
+      clearInterval(timer);
+      const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      const gain = audioContext.createGain();
+      const dest = audioContext.createMediaStreamDestination();
+      source.connect(analyser);
+      source.connect(gain);
+      gain.connect(dest);
+      processor.processedTrack = dest.stream.getAudioTracks()[0];
+
+      const buf = new Float32Array(analyser.fftSize);
+      let hold = 0;
+      timer = window.setInterval(() => {
+        const db = dbfs(analyser, buf);
+        state.level = db;
+        const now = performance.now();
+        if (db >= threshold.current) hold = now + 250;
+        gain.gain.value = now < hold ? 1 : 0;
+      }, 20);
+    },
+    async restart(opts) {
+      await processor.destroy();
+      await processor.init(opts);
+    },
+    async destroy() {
+      clearInterval(timer);
+      timer = 0;
+      state.level = -100;
+    },
+  };
+
+  return { processor, threshold, level: () => state.level };
+}
+
+// useMicPreview opens the microphone on its own so the settings meter works
+// before joining a call. It returns a dBFS level getter. Nothing is published
+// or played; the stream exists only for metering.
+export function useMicPreview(settings: Settings, enabled: boolean): () => number {
+  const level = useRef(-100);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let ctx: AudioContext | null = null;
+    let stream: MediaStream | null = null;
+    let raf = 0;
+    let cancelled = false;
+    (async () => {
+      try {
+        ctx = new AudioContext();
+        const mic = await navigator.mediaDevices.getUserMedia({
+          audio: capture(settingsRef.current),
+        });
+        if (cancelled) {
+          mic.getTracks().forEach((t) => t.stop());
+          ctx.close();
+          return;
+        }
+        stream = mic;
+        ctx.resume().catch(() => {});
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        ctx.createMediaStreamSource(mic).connect(analyser);
+        const buf = new Float32Array(analyser.fftSize);
+        const tick = () => {
+          level.current = dbfs(analyser, buf);
+          raf = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch {
+        level.current = -100;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+      ctx?.close();
+      level.current = -100;
+    };
+    // Restart on the device the user actually selected; other processing
+    // toggles shift the level only slightly and should not re-prompt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, settings.micDeviceId]);
+
+  return useCallback(() => level.current, []);
 }
 
 // capture maps our settings to LiveKit/browser microphone constraints.
@@ -46,11 +168,13 @@ export interface Voice {
   status: VoiceStatus;
   error: string;
   peers: string[];
+  speaking: string[];
   muted: boolean;
   join: (c: Channel) => void;
   leave: () => void;
   toggleMute: () => void;
   setPeerVolume: (name: string, volume: number) => void;
+  micLevel: () => number;
 }
 
 // useVoice owns the single LiveKit connection for the session so it survives
@@ -62,6 +186,7 @@ export function useVoice(settings: Settings): Voice {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState("");
   const [peers, setPeers] = useState<string[]>([]);
+  const [speaking, setSpeaking] = useState<string[]>([]);
   const [muted, setMuted] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement[]>([]);
@@ -69,8 +194,14 @@ export function useVoice(settings: Settings): Voice {
   const settingsRef = useRef(settings);
   const mutedRef = useRef(false);
   const appliedRef = useRef("");
+  const gateRef = useRef<MicGate | null>(null);
   settingsRef.current = settings;
   mutedRef.current = muted;
+
+  if (!gateRef.current) gateRef.current = micGate();
+  const gate = gateRef.current;
+  gate.threshold.current = settings.gateThreshold;
+  const micLevel = useCallback(() => gate.level(), [gate]);
 
   const leave = useCallback(() => {
     genRef.current++;
@@ -84,6 +215,7 @@ export function useVoice(settings: Settings): Voice {
     setStatus("idle");
     setError("");
     setPeers([]);
+    setSpeaking([]);
     setMuted(false);
   }, []);
 
@@ -106,6 +238,9 @@ export function useVoice(settings: Settings): Voice {
           setPeers([...room.remoteParticipants.values()].map((p) => p.name || p.identity));
         room.on(RoomEvent.ParticipantConnected, sync);
         room.on(RoomEvent.ParticipantDisconnected, sync);
+        room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) =>
+          setSpeaking(speakers.map((p) => p.name || p.identity)),
+        );
         room.on(RoomEvent.TrackSubscribed, (track) => {
           if (track.kind !== Track.Kind.Audio) return;
           const el = track.attach() as HTMLAudioElement;
@@ -124,7 +259,8 @@ export function useVoice(settings: Settings): Voice {
           room.disconnect();
           return;
         }
-        await room.localParticipant.setMicrophoneEnabled(true, capture(s), publish(s));
+        const mic = await room.localParticipant.setMicrophoneEnabled(true, capture(s), publish(s));
+        if (mic?.audioTrack) await mic.audioTrack.setProcessor(gate.processor);
         if (s.speakerDeviceId) {
           await room.switchActiveDevice("audiooutput", s.speakerDeviceId).catch(() => {});
         }
@@ -137,7 +273,7 @@ export function useVoice(settings: Settings): Voice {
         setError((err as Error).message);
       }
     },
-    [leave],
+    [leave, gate],
   );
 
   // Apply mic device / processing / quality changes to a live call. LiveKit
@@ -156,9 +292,10 @@ export function useVoice(settings: Settings): Voice {
         capture(settings),
         publish(settings),
       );
+      if (p?.audioTrack) await p.audioTrack.setProcessor(gate.processor);
       if (mutedRef.current) await p?.mute();
     })().catch((err) => setError((err as Error).message));
-  }, [settings, status]);
+  }, [settings, status, gate]);
 
   // Speaker changes route through setSinkId on browsers that support it.
   useEffect(() => {
@@ -197,5 +334,17 @@ export function useVoice(settings: Settings): Voice {
     [],
   );
 
-  return { channel, status, error, peers, muted, join, leave, toggleMute, setPeerVolume };
+  return {
+    channel,
+    status,
+    error,
+    peers,
+    speaking,
+    muted,
+    join,
+    leave,
+    toggleMute,
+    setPeerVolume,
+    micLevel,
+  };
 }

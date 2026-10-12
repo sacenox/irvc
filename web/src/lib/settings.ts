@@ -17,6 +17,7 @@ export interface Settings {
   micDeviceId: string;
   speakerDeviceId: string;
   deafened: boolean;
+  gateThreshold: number;
 }
 
 export const defaultSettings: Settings = {
@@ -28,6 +29,7 @@ export const defaultSettings: Settings = {
   micDeviceId: "",
   speakerDeviceId: "",
   deafened: false,
+  gateThreshold: -60,
 };
 
 const key = "irvc.settings";

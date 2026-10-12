@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HeadphoneOff, Headphones } from "lucide-react";
 import { Room } from "livekit-client";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import type { AudioPresetName, Settings } from "../lib/settings";
+import { useMicPreview, type Voice } from "../lib/voice";
+
+const minDb = -60;
+const maxDb = -10;
+
+// dbPct maps a dBFS value onto 0..100 across the slider's range.
+function dbPct(db: number) {
+  return Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb))) * 100;
+}
 
 const presets: { value: AudioPresetName; label: string }[] = [
   { value: "telephone", label: "telephone · 12 kbps" },
@@ -39,12 +48,18 @@ function useDevices(kind: MediaDeviceKind) {
 export default function SettingsPanel({
   settings,
   update,
+  voice,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  voice: Voice;
 }) {
   const mics = useDevices("audioinput");
   const speakers = useDevices("audiooutput");
+  // Outside a call there is no published track to meter, so open the mic for a
+  // preview. In a call, reuse the live level to avoid capturing twice.
+  const preview = useMicPreview(settings, voice.status !== "live");
+  const meter = voice.status === "live" ? voice.micLevel : preview;
 
   return (
     <aside className="w-64 shrink-0 overflow-y-auto border-l border-sepia/15">
@@ -60,6 +75,22 @@ export default function SettingsPanel({
             {settings.deafened ? <HeadphoneOff size={14} /> : <Headphones size={14} />}
             {settings.deafened ? "deafened" : "deafen"}
           </Button>
+        </Group>
+
+        <Group label="Voice activation">
+          <Level meter={meter} threshold={settings.gateThreshold} />
+          <input
+            type="range"
+            min={minDb}
+            max={maxDb}
+            step={1}
+            value={settings.gateThreshold}
+            onChange={(e) => update({ gateThreshold: Number(e.target.value) })}
+            className="w-full accent-gold"
+          />
+          <div className="px-1 text-xs text-sepia/50">
+            transmits above {settings.gateThreshold} dB
+          </div>
         </Group>
 
         <Group label="Devices">
@@ -117,6 +148,31 @@ export default function SettingsPanel({
         </Group>
       </div>
     </aside>
+  );
+}
+
+// Level draws the live mic level and marks where the gate threshold sits, so
+// the slider can be placed above the room's background noise.
+function Level({ meter, threshold }: { meter: () => number; threshold: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      if (ref.current) ref.current.style.width = `${dbPct(meter())}%`;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [meter]);
+
+  return (
+    <div className="relative mx-1 h-1.5 overflow-hidden rounded bg-muted">
+      <div ref={ref} className="h-full bg-gold/70" />
+      <div
+        className="absolute inset-y-0 w-0.5 bg-sepia/60"
+        style={{ left: `${dbPct(threshold)}%` }}
+      />
+    </div>
   );
 }
 

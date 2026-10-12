@@ -118,7 +118,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         </header>
         <ChatPane channel={selected} messages={messages} />
       </main>
-      {panel === "settings" && <SettingsPanel settings={settings} update={update} />}
+      {panel === "settings" && <SettingsPanel settings={settings} update={update} voice={voice} />}
       {panel === "users" && <UserList users={users} online={online} />}
     </div>
   );

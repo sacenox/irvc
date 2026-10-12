@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MicOff, Volume2, VolumeX } from "lucide-react";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import type { Voice } from "../lib/voice";
 
@@ -14,7 +15,7 @@ function load(): Record<string, number> {
 }
 
 export default function VoicePeers({ voice, username }: { voice: Voice; username: string }) {
-  const { peers, muted: selfMuted, setPeerVolume } = voice;
+  const { peers, muted: selfMuted, setPeerVolume, speaking } = voice;
   const [volumes, setVolumes] = useState<Record<string, number>>(load);
   const [muted, setMuted] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
   return (
     <>
       <div className="flex items-center gap-1.5 text-xs text-sepia/70">
-        <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+        <Dot on={speaking.includes(username)} />
         {username} <span className="text-sepia/40">(you)</span>
         {selfMuted && <MicOff size={10} className="text-sepia/50" />}
       </div>
@@ -55,7 +56,7 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
             onClick={() => setOpen((o) => (o === p ? null : p))}
             className="flex w-full items-center gap-1.5 text-left text-xs text-sepia/70 hover:text-sepia"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+            <Dot on={speaking.includes(p)} />
             {p}
             {muted.has(p) && <VolumeX size={10} className="text-sepia/50" />}
           </button>
@@ -84,5 +85,14 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
         </div>
       ))}
     </>
+  );
+}
+
+// The dot stays dim until the participant is speaking, then lights up.
+function Dot({ on }: { on: boolean }) {
+  return (
+    <span
+      className={cn("h-1.5 w-1.5 rounded-full transition-colors", on ? "bg-gold" : "bg-sepia/25")}
+    />
   );
 }
