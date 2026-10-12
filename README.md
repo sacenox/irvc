@@ -9,7 +9,8 @@ deployment runbook.
 Three processes on one host:
 
 - **livekit-server** — voice only. Ephemeral rooms.
-- **irvc** (this repo, Go) — API, auth, text chat over WebSocket, SQLite.
+- **irvc** (this repo, Go) — API, auth, text chat and presence over WebSocket,
+  media uploads, SQLite.
 - **Caddy** — TLS + reverse proxy for the frontend, API, and LiveKit signal.
 
 ## System dependencies
@@ -24,10 +25,13 @@ Bare Linux, no Docker. On Arch:
 
 ## Build
 
+`make` builds both the Go server and the web frontend. Or step by step:
+
     go build -o irvc .
     cd web && npm install && npm run build
 
-`web/dist` is served by the Go process.
+`web/dist` is served by the Go process. `make test` runs the Go and npm tests;
+`make fmt` formats. For frontend work, `cd web && npm run dev` runs Vite.
 
 ## Configuration
 
@@ -45,6 +49,10 @@ Secrets come from the shell env:
 | `IRVC_MAX_UPLOAD` | `8388608` | max image upload bytes |
 
 Voice is disabled if the LiveKit vars are unset.
+
+The address, DB, media, upload, and LiveKit URL settings also have flags
+(`--listen`, `--db`, `--media-dir`, `--max-upload`, `--livekit-url`). Run
+`./irvc --help`. `./irvc --gen-secret` prints a random session secret.
 
 Example `livekit.yaml` (run with `livekit-server --config livekit.yaml`):
 

@@ -10,14 +10,17 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 
 **In:**
 - Server-side accounts, invite-only.
-- Text channels with persisted history (IRC-like).
-- Voice channels, ephemeral (not recorded).
-- Presence: online/offline.
+- Text channels with persisted history (IRC-like), GFM markdown, multiline compose, mentions.
+- Image attachments (raster only), stored on disk.
+- Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.
+- Presence: online/offline, plus who is in each voice channel without joining.
+- Client themes, font size, per-user voice settings.
 - One server per deployment, seeded with one text and one voice channel.
 
 **Out (now):**
 - Large scale, multi-node, clustering.
-- Recording, screen share, DMs.
+- Recording, screen share, video, DMs.
+- Message editing/deletion/search, channel CRUD.
 - Email, OAuth, passkeys.
 - Docker.
 - Backups.
@@ -28,26 +31,28 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 One VPS, three processes:
 
 - **LiveKit** — self-hosted, voice only. Own ports: signal `7880`, TCP `7881`, media `50000-60000/udp`. Media ports exposed raw, not proxied.
-- **Gin server (Go)** — API, auth, invite/session handling, token minting, text chat over WebSocket, SQLite.
+- **Gin server (Go)** — API, auth, invite/session handling, LiveKit token minting, text chat and presence over WebSocket, media upload/serve, SQLite.
 - **Caddy** — TLS + reverse proxy for frontend and API. Terminates TLS; proxies `wss` to LiveKit signal.
 
 Split:
 - Text → our WebSocket + SQLite. LiveKit not involved.
-- Voice → LiveKit. Ephemeral.
-- Presence → our WebSocket (connected = online).
+- Voice → LiveKit. Ephemeral. The Go server mints tokens but never dials LiveKit.
+- Presence → our WebSocket (connected = online; voice occupancy broadcast to all).
+- Media → disk under the media dir, served by Go.
 
 ## Auth & Identity
 
 - Invite links: single-use, 14-day expiry. Anyone with a link creates a user and joins.
 - Revoke = delete the row.
 - Passwords hashed with argon2id.
-- Login → session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) → server mints a short-lived LiveKit token when a voice channel is joined.
-- Rate limit login and invite-claim endpoints.
+- Login → session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`), 30-day TTL, server-side session row. Cookie value is HMAC-signed.
+- Server mints a short-lived LiveKit token when a voice channel is joined.
+- Rate limit login and invite-claim endpoints (per IP).
 - No email. Admin resets passwords by hand.
 
 ## Data (SQLite)
 
-WAL mode, `busy_timeout`. One file, the only state.
+WAL mode, `busy_timeout`. One file, the only state; uploaded media lives in the media dir.
 
 ```
 users    (id, username, pass_hash, created_at)
@@ -57,23 +62,31 @@ channels (id, type, name, position, created_at)   -- type: text | voice
 messages (id, channel_id, user_id, body, created_at)
 ```
 
-Seed: one text channel `#general`, one voice channel `general`.
+- Messages are returned joined with their author's username.
+- Seed: one text channel `#general`, one voice channel `general`.
+- Uploaded images: random names, raster only (no SVG/HTML), served with `nosniff`.
 
 ## Behavior
 
-- **Channels:** seeded only (`#general` text, `general` voice). Ordered by `position`. CRUD is out of scope for now.
-- **Text:** messages persist; shown as timestamp, author, content. Live append over WS.
-- **Voice:** joining a voice channel connects to its LiveKit room. Not persisted, not recorded.
-- **Presence:** a user is online while their WS connection is up; otherwise offline. No invisible mode.
+- **Channels:** seeded only (`#general` text, `general` voice). Ordered by `position`. CRUD is out of scope.
+- **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
+- **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
+- **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel.
+- **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide.
+- **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.
+- **Voice controls:** mute, deafen (local only), per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone.
+- **Presence:** a user is online while their WS connection is up; otherwise offline. Voice occupancy rides along with presence. No invisible mode.
+- **Settings:** themes, font size, and voice preferences are client-side (device-local). Voice occupancy is server-side only.
 
 ## Frontend
 
-- React, modern. oxlint + oxfmt. Tailwind + Shadcn.
-- Dark sepia theme (colors from `../www`), monospace, minimalist, functional.
+- React, modern. oxlint + oxfmt. Tailwind + Shadcn. LiveKit client.
+- Two themes (`80s-nicotine` sepia default, `tuxedo` grayscale) × light/dark, applied before first paint. Monospace, minimalist, functional.
 - Layout:
-  - Left sidebar: text channels, then voice channels.
-  - Focus pane: selected item, or first text channel by default.
-  - Right sidebar (toggleable): user list with online/offline.
+  - Left sidebar: text channels, voice channels (with occupants), then users (online/offline). Collapsible; overlays on mobile.
+  - Focus pane: chat for the selected text channel, or the settings pane.
+  - Header: sidebar toggle, current channel or settings title.
+- Settings pane: theme, font size, sounds, deafen, voice-activation meter/threshold, devices, quality, mic processing.
 
 ## Config
 
@@ -82,14 +95,18 @@ Secrets from shell env, `IRVC_*`:
 ```
 IRVC_LISTEN_ADDR
 IRVC_DB_PATH
-IRVC_SESSION_SECRET
-IRVC_LIVEKIT_URL
+IRVC_SESSION_SECRET     required to run
+IRVC_LIVEKIT_URL        browser-facing
 IRVC_LIVEKIT_API_KEY
 IRVC_LIVEKIT_SECRET
+IRVC_MEDIA_DIR          uploaded image storage
+IRVC_MAX_UPLOAD         max upload bytes
 ```
 
-LiveKit key/secret must match the LiveKit server config and ours.
+LiveKit key/secret must match the LiveKit server config and ours. Voice is disabled when the LiveKit vars are unset.
+
+Flags mirror these. `irvc invite` creates an invite and prints a `/join?token=...` link; `irvc --gen-secret` prints a random session secret. A Makefile wraps build/test/fmt for Go and npm.
 
 ## Deployment
 
-Bare Linux, no Docker. README lists system-level deps. Services start on boot and restart on crash (systemd).
+Bare Linux, no Docker. README lists system-level deps. Services start on boot and restart on crash (systemd). See `DEPLOY.md` for the runbook.
