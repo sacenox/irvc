@@ -151,6 +151,32 @@ export default function ChatPane({
     }
   }
 
+  // The whole window is a drop target for image files. Keep the latest attach()
+  // in a ref so the listeners below are registered once.
+  const attachRef = useRef(attach);
+  attachRef.current = attach;
+  const hasChannel = channel !== null;
+  useEffect(() => {
+    if (!hasChannel) return;
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
+    // preventDefault on dragover is what makes the window a valid drop target;
+    // on drop it stops the browser from navigating to the file.
+    const onDragOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      attachRef.current([...(e.dataTransfer?.files ?? [])]);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [hasChannel]);
+
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
     if (images.length === 0) return;
