@@ -1,0 +1,23 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+# One deploy at a time; a newer push cancels the one still running.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      # The service runs from this checkout and web/dist is served from its
+      # disk, so build in place rather than in the runner's own _work dir.
+      - name: update checkout
+        run: git -C /home/sean/repos/irvc pull --ff-only
+      - name: build
+        run: make -C /home/sean/repos/irvc
+      - name: restart irvc
+        run: sudo -n /usr/bin/systemctl restart irvc.service
