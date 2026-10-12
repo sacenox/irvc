@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -33,23 +34,38 @@ export default function ChatPane({
 }) {
   const [body, setBody] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Jump to the bottom on channel switch, regardless of prior position.
-  useLayoutEffect(() => {
-    stickRef.current = true;
+  const scrollToBottom = useCallback(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [channel]);
+  }, []);
 
-  // Follow new messages only while the user is pinned to the bottom. Layout
-  // effect so the initial history scrolls before the browser can unpin us.
+  // Jump to the latest messages on channel switch, regardless of prior position.
   useLayoutEffect(() => {
-    const el = listRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    stickRef.current = true;
+    scrollToBottom();
+  }, [channel?.id, scrollToBottom]);
+
+  // Follow appended messages only while the user is pinned to the bottom.
+  useLayoutEffect(() => {
+    if (stickRef.current) scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Images and markdown grow after the effects above run, so stay pinned while
+  // the content resizes — unless the user has scrolled up.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const ro = new ResizeObserver(() => {
+      if (stickRef.current) scrollToBottom();
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [channel?.id, scrollToBottom]);
 
   function onScroll() {
     const el = listRef.current;
@@ -126,26 +142,28 @@ export default function ChatPane({
   return (
     <>
       <div ref={listRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {messages.map((m) => {
-          const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
-          return (
-            <div key={m.id} className="flex gap-1.5 py-0.5 text-sm leading-6">
-              <span className="shrink-0">
-                <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
-                {!action && <span className="text-gold/90">{m.username}</span>}
-              </span>
-              {action ? (
-                <div className="min-w-0 flex-1 break-words italic text-gold/90">
-                  * {m.username} {action}
-                </div>
-              ) : (
-                <div className={bodyClass}>
-                  <Markdown text={m.body} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+        <div ref={contentRef}>
+          {messages.map((m) => {
+            const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
+            return (
+              <div key={m.id} className="flex gap-1.5 py-0.5 text-sm leading-6">
+                <span className="shrink-0">
+                  <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
+                  {!action && <span className="text-gold/90">{m.username}</span>}
+                </span>
+                {action ? (
+                  <div className="min-w-0 flex-1 break-words italic text-gold/90">
+                    * {m.username} {action}
+                  </div>
+                ) : (
+                  <div className={bodyClass}>
+                    <Markdown text={m.body} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-sepia/15 p-3">
         <input

@@ -62,9 +62,8 @@ export default function SettingsPanel({
   const meter = voice.status === "live" ? voice.micLevel : preview;
 
   return (
-    <aside className="w-64 shrink-0 overflow-y-auto border-l border-sepia/15">
-      <div className="px-4 py-3 text-[10px] uppercase tracking-widest text-sepia/40">Settings</div>
-      <div className="space-y-4 px-3 pb-4">
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl space-y-4 p-6">
         <Group label="Voice">
           <Button
             variant={settings.deafened ? "secondary" : "ghost"}
@@ -147,7 +146,7 @@ export default function SettingsPanel({
           />
         </Group>
       </div>
-    </aside>
+    </div>
   );
 }
 

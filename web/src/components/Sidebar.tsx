@@ -1,9 +1,24 @@
 import { useState, type ReactNode } from "react";
-import { Hash, Mic, MicOff, PhoneOff, UserPlus, Volume2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Hash,
+  LogOut,
+  Mic,
+  MicOff,
+  Moon,
+  PhoneOff,
+  Settings,
+  Sun,
+  UserPlus,
+  Volume2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
-import type { Channel } from "../lib/types";
+import type { Channel, UserSummary } from "../lib/types";
+import type { Theme } from "../lib/theme";
 import type { Voice } from "../lib/voice";
+import UserList from "./UserList";
 import VoicePeers from "./VoicePeers";
 
 interface Invite {
@@ -17,14 +32,29 @@ export default function Sidebar({
   onSelect,
   voice,
   username,
+  users,
+  online,
+  theme,
+  onToggleTheme,
+  settingsOpen,
+  onToggleSettings,
+  onLogout,
 }: {
   channels: Channel[];
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   voice: Voice;
   username: string;
+  users: UserSummary[];
+  online: Set<string>;
+  theme: Theme;
+  onToggleTheme: () => void;
+  settingsOpen: boolean;
+  onToggleSettings: () => void;
+  onLogout: () => void;
 }) {
   const [label, setLabel] = useState("create invite");
+  const [showUsers, setShowUsers] = useState(true);
 
   async function invite() {
     try {
@@ -38,7 +68,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-sepia/15">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-sepia/15 bg-bg max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-20">
       <div className="px-4 py-3 text-sm font-semibold text-gold">irvc</div>
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
         <Group
@@ -56,8 +86,19 @@ export default function Sidebar({
               <VoiceChannel key={c.id} channel={c} voice={voice} username={username} />
             ))}
         </div>
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowUsers((v) => !v)}
+            className="flex w-full items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-widest text-sepia/40 hover:text-sepia/70"
+          >
+            {showUsers ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            Users
+          </button>
+          {showUsers && <UserList users={users} online={online} />}
+        </div>
       </nav>
-      <div className="p-2">
+      <div className="space-y-2 p-2">
         <Button
           variant="ghost"
           size="sm"
@@ -67,6 +108,27 @@ export default function Sidebar({
           <UserPlus size={14} />
           {label}
         </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleTheme}
+            title={theme === "dark" ? "light mode" : "dark mode"}
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </Button>
+          <Button
+            variant={settingsOpen ? "secondary" : "ghost"}
+            size="icon-sm"
+            onClick={onToggleSettings}
+            title="settings"
+          >
+            <Settings />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={onLogout} title="log out">
+            <LogOut />
+          </Button>
+        </div>
       </div>
     </aside>
   );
