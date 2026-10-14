@@ -13,3 +13,11 @@ This is ours.
 - `README.md` — build, configuration, invites, run.
 - `irvc.md` — design.
 - `DEPLOY.md` — runbook for the VPS deployment.
+- `deploy/dev/README.md` — local dev stack (Podman).
+
+## Dev
+
+`deploy/dev/` runs the whole thing locally in containers: `podman-compose up
+-d --build`, then <http://localhost:8080>. The container serves the built
+frontend; run `npm run dev` in `web/` for HMR. Details in
+`deploy/dev/README.md`. The bare-metal path in `DEPLOY.md` is unaffected.

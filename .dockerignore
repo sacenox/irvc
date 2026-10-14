@@ -1,0 +1,8 @@
+.git
+irvc
+*.db
+*.db-shm
+*.db-wal
+media
+web/node_modules
+web/dist

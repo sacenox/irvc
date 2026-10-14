@@ -13,9 +13,22 @@ Three processes on one host:
   media uploads, SQLite.
 - **Caddy** — TLS + reverse proxy for the frontend, API, and LiveKit signal.
 
+## Local dev (Podman)
+
+An alternate, disposable dev path that does not touch the bare-metal setup:
+`deploy/dev/` builds irvc + the frontend into one image and runs it with
+LiveKit under Podman.
+
+    cd deploy/dev
+    podman-compose up -d --build
+
+Serves <http://localhost:8080>. The container serves the built frontend; run
+`cd web && npm run dev` for HMR (Vite proxies `/api` to `:8080`). See
+`deploy/dev/README.md` for invites, state, and reset.
+
 ## System dependencies
 
-Bare Linux, no Docker. On Arch:
+The deployment path below is bare Linux, no Docker. On Arch:
 
     sudo pacman -S go nodejs npm caddy
 

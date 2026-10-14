@@ -26,7 +26,7 @@ export interface Message {
 }
 
 export interface WSEvent {
-  type: "message" | "presence";
+  type: "message" | "presence" | "pong";
   message?: Message;
   users?: string[];
   roster?: UserSummary[];

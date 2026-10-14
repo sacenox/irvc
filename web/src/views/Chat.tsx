@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Hash, Menu, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
+import { usePresence } from "../lib/presence";
 import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
 import { useVoice } from "../lib/voice";
-import type { Channel, Message, User, UserSummary, WSEvent } from "../lib/types";
+import type { Channel, Message, User, UserSummary } from "../lib/types";
 import ChatPane from "../components/ChatPane";
 import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
+
+const voiceMessage = (channelId: number) => JSON.stringify({ type: "voice", channelId });
 
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -20,15 +23,28 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const desktop = useRef(window.matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const { settings, update } = useSettings();
-  const voice = useVoice(settings, (channelId) => {
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "voice", channelId: channelId ?? 0 }));
-    }
-  });
   const [voiceRooms, setVoiceRooms] = useState<Record<string, string[]>>({});
+  const voiceChannel = useRef(0);
+  const { settings, update } = useSettings();
+  // Presence arrives as a snapshot on every connect, so a reconnect resyncs the
+  // roster and voice occupancy. Replay our own voice channel on connect, since
+  // the server drops occupancy when the socket dies.
+  const { connected, send } = usePresence(
+    (ev) => {
+      if (ev.type === "presence") {
+        setOnline(new Set(ev.users ?? []));
+        if (ev.roster) setUsers(ev.roster);
+        setVoiceRooms(ev.voice ?? {});
+      } else if (ev.message && ev.message.channelId === selectedId.current) {
+        setMessages((prev) => [...prev, ev.message!]);
+      }
+    },
+    () => send(voiceMessage(voiceChannel.current)),
+  );
+  const voice = useVoice(settings, (channelId) => {
+    voiceChannel.current = channelId ?? 0;
+    send(voiceMessage(voiceChannel.current));
+  });
   const { mode, toggleMode, theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -50,26 +66,6 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     api<UserSummary[]>("/users")
       .then(setUsers)
       .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/api/ws`);
-    wsRef.current = ws;
-    ws.onmessage = (e) => {
-      const ev = JSON.parse(e.data as string) as WSEvent;
-      if (ev.type === "presence") {
-        setOnline(new Set(ev.users ?? []));
-        if (ev.roster) setUsers(ev.roster);
-        setVoiceRooms(ev.voice ?? {});
-      } else if (ev.message && ev.message.channelId === selectedId.current) {
-        setMessages((prev) => [...prev, ev.message!]);
-      }
-    };
-    return () => {
-      wsRef.current = null;
-      ws.close();
-    };
   }, []);
 
   useEffect(() => {
@@ -146,6 +142,11 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
               </>
             )}
           </span>
+          {!connected && (
+            // Presence is stale until the socket is back, so say so instead of
+            // showing a silently wrong roster.
+            <span className="ml-auto text-xs text-sepia/50">reconnecting…</span>
+          )}
         </header>
         {settingsOpen ? (
           <SettingsPanel

@@ -41,12 +41,12 @@ type client struct {
 type hub struct {
 	mu      sync.Mutex
 	clients map[int64]map[*client]bool
-	voice   map[int64]map[int64]string
+	voice   map[int64]map[*client]bool
 	db      *sql.DB
 }
 
 func newHub(db *sql.DB) *hub {
-	return &hub{clients: map[int64]map[*client]bool{}, voice: map[int64]map[int64]string{}, db: db}
+	return &hub{clients: map[int64]map[*client]bool{}, voice: map[int64]map[*client]bool{}, db: db}
 }
 
 func (h *hub) register(c *client) {
@@ -79,7 +79,7 @@ func (h *hub) clearVoiceLocked(c *client) {
 		return
 	}
 	if set := h.voice[c.voiceID]; set != nil {
-		delete(set, c.userID)
+		delete(set, c)
 		if len(set) == 0 {
 			delete(h.voice, c.voiceID)
 		}
@@ -88,15 +88,17 @@ func (h *hub) clearVoiceLocked(c *client) {
 }
 
 // setVoice moves a client into a voice channel (0 for none) and rebroadcasts.
+// Occupancy is keyed by connection, not user, so one tab leaving a channel
+// does not evict another tab that is still in it.
 func (h *hub) setVoice(c *client, channelID int64) {
 	h.mu.Lock()
 	h.clearVoiceLocked(c)
 	c.voiceID = channelID
 	if channelID != 0 {
 		if h.voice[channelID] == nil {
-			h.voice[channelID] = map[int64]string{}
+			h.voice[channelID] = map[*client]bool{}
 		}
-		h.voice[channelID][c.userID] = c.username
+		h.voice[channelID][c] = true
 	}
 	h.mu.Unlock()
 	h.broadcastPresence()
@@ -158,9 +160,13 @@ func (h *hub) voiceUsers() map[string][]string {
 	defer h.mu.Unlock()
 	out := map[string][]string{}
 	for channelID, set := range h.voice {
+		seen := map[string]bool{}
 		names := make([]string, 0, len(set))
-		for _, name := range set {
-			names = append(names, name)
+		for c := range set {
+			if !seen[c.username] {
+				seen[c.username] = true
+				names = append(names, c.username)
+			}
 		}
 		sort.Strings(names)
 		out[strconv.FormatInt(channelID, 10)] = names
@@ -177,28 +183,32 @@ func (h *hub) broadcastPresence() {
 	})
 }
 
+// checkOrigin allows same-host origins. It lives on the (shared) upgrader, so
+// it must not be reassigned per request: concurrent upgrades would race.
+func checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return u.Hostname() == host
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin:     checkOrigin,
 }
 
 func (s *Server) handleWS(c *gin.Context) {
 	user := c.MustGet("user").(User)
-	upgrader.CheckOrigin = func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		u, err := url.Parse(origin)
-		if err != nil {
-			return false
-		}
-		host := r.Host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		return u.Hostname() == host
-	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
@@ -211,7 +221,7 @@ func (s *Server) handleWS(c *gin.Context) {
 
 const (
 	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
+	pongWait   = 30 * time.Second
 	pingPeriod = (pongWait * 9) / 10
 )
 
@@ -235,8 +245,17 @@ func (c *client) readPump() {
 		if json.Unmarshal(msg, &in) != nil {
 			continue
 		}
-		if in.Type == "voice" {
+		switch in.Type {
+		case "voice":
 			c.hub.setVoice(c, in.ChannelID)
+		case "ping":
+			// Application-level heartbeat: the browser answers protocol pings
+			// itself, so a client cannot see them. This lets it detect a
+			// half-open socket (sleep, dead network) instead of trusting it.
+			select {
+			case c.send <- []byte(`{"type":"pong"}`):
+			default:
+			}
 		}
 	}
 }

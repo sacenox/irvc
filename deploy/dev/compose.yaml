@@ -1,0 +1,31 @@
+name: irvc-dev
+
+services:
+  irvc:
+    build:
+      context: ../..
+      dockerfile: deploy/dev/Containerfile
+    image: localhost/irvc:dev
+    network_mode: host
+    environment:
+      IRVC_LISTEN_ADDR: ":8080"
+      IRVC_SESSION_SECRET: ${IRVC_SESSION_SECRET:-dev-session-secret-change-me}
+      IRVC_LIVEKIT_URL: ${IRVC_LIVEKIT_URL:-ws://localhost:7880}
+      IRVC_LIVEKIT_API_KEY: irvc
+      IRVC_LIVEKIT_SECRET: ${IRVC_LIVEKIT_SECRET:-irvc-dev-livekit-secret-000000000000}
+    volumes:
+      - irvc-data:/data
+    depends_on:
+      - livekit
+    restart: unless-stopped
+
+  livekit:
+    image: docker.io/livekit/livekit-server:latest
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  irvc-data:

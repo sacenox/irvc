@@ -22,7 +22,6 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 - Recording, screen share, video, DMs.
 - Message editing/deletion/search, channel CRUD.
 - Email, OAuth, passkeys.
-- Docker.
 - Backups.
 - Password reset via email (admin resets manually).
 

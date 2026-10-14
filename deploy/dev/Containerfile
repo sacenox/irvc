@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# Dev image: builds irvc and the frontend, serves both from one process.
+
+FROM docker.io/library/golang:1.27-alpine AS server
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY *.go ./
+RUN CGO_ENABLED=0 go build -trimpath -o /out/irvc .
+
+FROM docker.io/library/node:26-alpine AS web
+WORKDIR /src
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM docker.io/library/alpine:3.21
+RUN apk add --no-cache ca-certificates && adduser -D -u 1000 irvc
+WORKDIR /app
+COPY --from=server /out/irvc /app/irvc
+COPY --from=web /src/dist /app/web/dist
+RUN mkdir -p /data && chown irvc /data
+ENV IRVC_DB_PATH=/data/irvc.db \
+    IRVC_MEDIA_DIR=/data/media
+USER irvc
+EXPOSE 8080
+ENTRYPOINT ["/app/irvc"]
