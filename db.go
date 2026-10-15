@@ -29,6 +29,7 @@ type Message struct {
 	Username  string `json:"username"`
 	Body      string `json:"body"`
 	CreatedAt int64  `json:"createdAt"`
+	EditedAt  int64  `json:"editedAt,omitempty"`
 }
 
 func OpenDB(path string) *sql.DB {
@@ -75,7 +76,8 @@ CREATE TABLE IF NOT EXISTS messages (
 	channel_id INTEGER NOT NULL,
 	user_id    INTEGER NOT NULL,
 	body       TEXT NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	edited_at  INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
 `
@@ -84,6 +86,7 @@ func migrate(db *sql.DB) {
 	if _, err := db.Exec(schema); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
+	db.Exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`)
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM channels`).Scan(&n); err != nil {
 		log.Fatalf("count channels: %v", err)

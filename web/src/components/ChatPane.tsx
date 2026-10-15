@@ -8,7 +8,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Paperclip, SendHorizontal } from "lucide-react";
+import { Paperclip, Pencil, SendHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { api, upload } from "../lib/api";
@@ -49,6 +49,8 @@ export default function ChatPane({
   username: string;
 }) {
   const [body, setBody] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editBody, setEditBody] = useState("");
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
     null,
@@ -66,6 +68,7 @@ export default function ChatPane({
 
   // Jump to the latest messages on channel switch, regardless of prior position.
   useLayoutEffect(() => {
+    setEditingId(null);
     stickRef.current = true;
     scrollToBottom();
   }, [channel?.id, scrollToBottom]);
@@ -197,6 +200,25 @@ export default function ChatPane({
     setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)));
   }
 
+  function startEdit(m: Message) {
+    setEditingId(m.id);
+    setEditBody(m.body);
+  }
+
+  async function saveEdit(id: number) {
+    const text = editBody.trim();
+    setEditingId(null);
+    if (!text) return;
+    await api(`/messages/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body: text }),
+    }).catch(() => {});
+  }
+
+  async function remove(id: number) {
+    await api(`/messages/${id}`, { method: "DELETE" }).catch(() => {});
+  }
+
   async function send() {
     const text = body.trim();
     if (!text || !channel) return;
@@ -245,6 +267,14 @@ export default function ChatPane({
         return;
       }
     }
+    if (e.key === "ArrowUp" && !body) {
+      const last = [...messages].reverse().find((m) => m.username === username);
+      if (last) {
+        e.preventDefault();
+        startEdit(last);
+      }
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       send();
@@ -262,11 +292,13 @@ export default function ChatPane({
           {messages.map((m) => {
             const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
             const hit = !action && isMentioned(m.body, username);
+            const own = m.username === username;
+            const editing = editingId === m.id;
             return (
               <div
                 key={m.id}
                 className={cn(
-                  "-mx-1.5 flex gap-1.5 rounded px-1.5 py-0.5 text-sm leading-6",
+                  "group -mx-1.5 flex items-start gap-1.5 rounded px-1.5 py-0.5 text-sm leading-6 hover:bg-sepia/5",
                   hit && "bg-[color-mix(in_srgb,var(--gold)_14%,transparent)]",
                 )}
               >
@@ -274,9 +306,29 @@ export default function ChatPane({
                   <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
                   {!action && <span className="text-gold/90">{m.username}</span>}
                 </span>
-                {action ? (
+                {editing ? (
+                  <textarea
+                    autoFocus
+                    rows={Math.min(editBody.split("\n").length, 8)}
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setEditingId(null);
+                      } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        saveEdit(m.id);
+                      }
+                    }}
+                    className="max-h-[200px] min-w-0 flex-1 resize-none rounded border border-input bg-transparent px-2 py-0.5 text-sm leading-6 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+                  />
+                ) : action ? (
                   <div className="min-w-0 flex-1 break-words italic text-gold/90">
                     * {m.username} {action}
+                    {m.editedAt ? (
+                      <span className="ml-1 not-italic text-xs text-sepia/40">(edited)</span>
+                    ) : null}
                   </div>
                 ) : (
                   <div className={bodyClass}>
@@ -285,6 +337,29 @@ export default function ChatPane({
                       collapsed={collapsed.has(m.id)}
                       onToggle={() => toggleImage(m.id)}
                     />
+                    {m.editedAt ? <span className="text-xs text-sepia/40">(edited)</span> : null}
+                  </div>
+                )}
+                {own && !editing && (
+                  <div className="invisible flex shrink-0 items-center gap-0.5 group-hover:visible">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      title="edit message"
+                      onClick={() => startEdit(m)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      title="delete message"
+                      onClick={() => remove(m.id)}
+                    >
+                      <Trash2 />
+                    </Button>
                   </div>
                 )}
               </div>

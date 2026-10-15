@@ -10,7 +10,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 
 **In:**
 - Server-side accounts, invite-only.
-- Text channels with persisted history (IRC-like), GFM markdown, multiline compose, mentions.
+- Text channels with persisted history (IRC-like), GFM markdown, multiline compose, mentions, message editing and deletion.
 - Image attachments (raster only), stored on disk.
 - Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.
 - Screen sharing into a voice channel, with tab/system audio, simulcast, and a 720p/1080p quality choice.
@@ -21,7 +21,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 **Out (now):**
 - Large scale, multi-node, clustering.
 - Recording, video, DMs.
-- Message editing/deletion/search, channel CRUD.
+- Message search, channel CRUD.
 - Email, OAuth, passkeys.
 - Backups.
 - Password reset via email (admin resets manually).
@@ -59,7 +59,7 @@ users    (id, username, pass_hash, created_at)
 invites  (token, created_by, expires_at, used_by, used_at)
 sessions (id, user_id, expires_at)
 channels (id, type, name, position, created_at)   -- type: text | voice
-messages (id, channel_id, user_id, body, created_at)
+messages (id, channel_id, user_id, body, created_at, edited_at)
 ```
 
 - Messages are returned joined with their author's username.

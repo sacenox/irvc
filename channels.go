@@ -36,7 +36,7 @@ func (s *Server) handleMessages(c *gin.Context) {
 		return
 	}
 	rows, err := s.db.Query(
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0)
 		 FROM messages m JOIN users u ON u.id = m.user_id
 		 WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 200`,
 		channelID,
@@ -49,7 +49,7 @@ func (s *Server) handleMessages(c *gin.Context) {
 	messages := []Message{}
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 			return
 		}
@@ -109,4 +109,66 @@ func (s *Server) handleSendMessage(c *gin.Context) {
 	msg := Message{ID: id, ChannelID: channelID, UserID: user.ID, Username: user.Username, Body: body, CreatedAt: now}
 	s.hub.broadcast(event{Type: "message", Message: &msg})
 	c.JSON(http.StatusOK, msg)
+}
+
+func (s *Server) handleEditMessage(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad message"})
+		return
+	}
+	var req sendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	body := strings.TrimSpace(req.Body)
+	if body == "" || len(body) > maxMessageLen {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	now := time.Now().Unix()
+	var m Message
+	err = s.db.QueryRow(
+		`UPDATE messages SET body = ?, edited_at = ?
+		 WHERE id = ? AND user_id = ?
+		 RETURNING id, channel_id, user_id, body, created_at, edited_at`,
+		body, now, msgID, user.ID,
+	).Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Body, &m.CreatedAt, &m.EditedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	m.Username = user.Username
+	s.hub.broadcast(event{Type: "message_edit", Message: &m})
+	c.JSON(http.StatusOK, m)
+}
+
+func (s *Server) handleDeleteMessage(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad message"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	var m Message
+	err = s.db.QueryRow(
+		`DELETE FROM messages WHERE id = ? AND user_id = ? RETURNING id, channel_id`,
+		msgID, user.ID,
+	).Scan(&m.ID, &m.ChannelID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	s.hub.broadcast(event{Type: "message_delete", Message: &m})
+	c.Status(http.StatusNoContent)
 }

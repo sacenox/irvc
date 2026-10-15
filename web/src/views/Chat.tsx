@@ -38,7 +38,13 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         if (ev.roster) setUsers(ev.roster);
         setVoiceRooms(ev.voice ?? {});
       } else if (ev.message && ev.message.channelId === selectedId.current) {
-        setMessages((prev) => [...prev, ev.message!]);
+        if (ev.type === "message") {
+          setMessages((prev) => [...prev, ev.message!]);
+        } else if (ev.type === "message_edit") {
+          setMessages((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
+        } else if (ev.type === "message_delete") {
+          setMessages((prev) => prev.filter((m) => m.id !== ev.message!.id));
+        }
       }
     },
     () => send(voiceMessage(voiceChannel.current)),

@@ -134,6 +134,8 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.GET("/channels", s.handleChannels)
 	authed.GET("/channels/:id/messages", s.handleMessages)
 	authed.POST("/channels/:id/messages", s.handleSendMessage)
+	authed.PATCH("/messages/:id", s.handleEditMessage)
+	authed.DELETE("/messages/:id", s.handleDeleteMessage)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
 	authed.POST("/invites", s.handleCreateInvite)
 	authed.POST("/upload", s.handleUpload)

@@ -23,10 +23,11 @@ export interface Message {
   username: string;
   body: string;
   createdAt: number;
+  editedAt?: number;
 }
 
 export interface WSEvent {
-  type: "message" | "presence" | "pong";
+  type: "message" | "message_edit" | "message_delete" | "presence" | "pong";
   message?: Message;
   users?: string[];
   roster?: UserSummary[];
