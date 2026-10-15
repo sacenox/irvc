@@ -47,7 +47,7 @@ function hasImage(body: string) {
 // prose supplies the block-level markdown styling; the CSS vars retune its
 // palette to the sepia theme.
 const bodyClass =
-  "prose prose-sm max-w-none min-w-0 flex-1 break-words [--tw-prose-body:var(--sepia)] [--tw-prose-quotes:var(--sepia)] [--tw-prose-headings:var(--sepia)] [--tw-prose-links:var(--gold)] [--tw-prose-bold:var(--sepia)] [--tw-prose-bullets:var(--sepia)] [--tw-prose-counters:var(--sepia)] [--tw-prose-quote-borders:color-mix(in_srgb,var(--sepia)_30%,transparent)] [--tw-prose-code:var(--sepia)] [--tw-prose-pre-code:var(--sepia)] [--tw-prose-pre-bg:color-mix(in_srgb,var(--sepia)_10%,transparent)] [--tw-prose-hr:color-mix(in_srgb,var(--sepia)_20%,transparent)] [--tw-prose-th-borders:color-mix(in_srgb,var(--sepia)_20%,transparent)] [--tw-prose-td-borders:color-mix(in_srgb,var(--sepia)_20%,transparent)]";
+  "prose prose-sm max-w-none break-words [--tw-prose-body:var(--sepia)] [--tw-prose-quotes:var(--sepia)] [--tw-prose-headings:var(--sepia)] [--tw-prose-links:var(--gold)] [--tw-prose-bold:var(--sepia)] [--tw-prose-bullets:var(--sepia)] [--tw-prose-counters:var(--sepia)] [--tw-prose-quote-borders:color-mix(in_srgb,var(--sepia)_30%,transparent)] [--tw-prose-code:var(--sepia)] [--tw-prose-pre-code:var(--sepia)] [--tw-prose-pre-bg:color-mix(in_srgb,var(--sepia)_10%,transparent)] [--tw-prose-hr:color-mix(in_srgb,var(--sepia)_20%,transparent)] [--tw-prose-th-borders:color-mix(in_srgb,var(--sepia)_20%,transparent)] [--tw-prose-td-borders:color-mix(in_srgb,var(--sepia)_20%,transparent)]";
 
 function clock(ts: number) {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -321,40 +321,41 @@ export default function ChatPane({
               <div
                 key={m.id}
                 className={cn(
-                  "group -mx-1.5 flex items-start gap-1.5 rounded px-1.5 py-0.5 text-sm leading-6 hover:bg-sepia/5",
+                  "group relative -mx-1.5 rounded px-1.5 py-0.5 text-sm leading-6 hover:bg-sepia/5",
                   hit && "bg-[color-mix(in_srgb,var(--gold)_14%,transparent)]",
                 )}
               >
-                <span className="shrink-0">
-                  <span className="text-sepia/40">{clock(m.createdAt)}</span>{" "}
-                  {!action && <span className="text-gold/90">{m.username}</span>}
-                </span>
-                {editing ? (
-                  <textarea
-                    autoFocus
-                    rows={Math.min(editBody.split("\n").length, 8)}
-                    value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        e.preventDefault();
-                        setEditingId(null);
-                      } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                        e.preventDefault();
-                        saveEdit(m.id);
-                      }
-                    }}
-                    className="max-h-[200px] min-w-0 flex-1 resize-none rounded border border-input bg-transparent px-2 py-0.5 text-sm leading-6 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-                  />
+                {action && !editing ? (
+                  <div className="break-words italic text-gold/90">
+                    <span className="mr-1 not-italic text-sepia/40">{clock(m.createdAt)}</span>
+                    * {m.username} {action}
+                    {m.editedAt ? (
+                      <span className="ml-1 not-italic text-xs text-sepia/40">(edited)</span>
+                    ) : null}
+                  </div>
                 ) : (
-                  <div className="min-w-0 flex-1">
-                    {action ? (
-                      <div className="break-words italic text-gold/90">
-                        * {m.username} {action}
-                        {m.editedAt ? (
-                          <span className="ml-1 not-italic text-xs text-sepia/40">(edited)</span>
-                        ) : null}
-                      </div>
+                  <>
+                    <div className="text-sepia/40">
+                      {clock(m.createdAt)}
+                      {!action && <span className="text-gold/90"> {m.username}</span>}
+                    </div>
+                    {editing ? (
+                      <textarea
+                        autoFocus
+                        rows={Math.min(editBody.split("\n").length, 8)}
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            setEditingId(null);
+                          } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            saveEdit(m.id);
+                          }
+                        }}
+                        className="block max-h-[200px] w-full resize-none rounded border border-input bg-transparent px-2 py-0.5 text-sm leading-6 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+                      />
                     ) : (
                       <div className={bodyClass}>
                         <Markdown
@@ -367,36 +368,36 @@ export default function ChatPane({
                         ) : null}
                       </div>
                     )}
-                    {m.reactions && Object.keys(m.reactions).length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap gap-1 pb-0.5">
-                        {reactions.map(({ key, Icon }) => {
-                          const list = m.reactions?.[key];
-                          if (!list?.length) return null;
-                          const active = list.includes(username);
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              title={list.join(", ")}
-                              onClick={() => toggleReaction(m.id, key)}
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs leading-none transition-colors",
-                                active
-                                  ? "border-gold/50 bg-gold/15 text-gold"
-                                  : "border-sepia/20 bg-sepia/5 text-sepia/70 hover:border-sepia/40",
-                              )}
-                            >
-                              <Icon className="size-3" />
-                              {list.length}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                  </>
+                )}
+                {!editing && m.reactions && Object.keys(m.reactions).length > 0 && (
+                  <div className="mt-0.5 flex flex-wrap gap-1 pb-0.5">
+                    {reactions.map(({ key, Icon }) => {
+                      const list = m.reactions?.[key];
+                      if (!list?.length) return null;
+                      const active = list.includes(username);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          title={list.join(", ")}
+                          onClick={() => toggleReaction(m.id, key)}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs leading-none transition-colors",
+                            active
+                              ? "border-gold/50 bg-gold/15 text-gold"
+                              : "border-sepia/20 bg-sepia/5 text-sepia/70 hover:border-sepia/40",
+                          )}
+                        >
+                          <Icon className="size-3" />
+                          {list.length}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {!editing && (
-                  <div className="invisible flex shrink-0 items-center gap-0.5 group-hover:visible">
+                  <div className="absolute right-1.5 top-0.5 hidden items-center gap-0.5 rounded-md border border-sepia/15 bg-panel px-0.5 shadow-sm group-hover:flex">
                     {reactions.map(({ key, label, Icon }) => (
                       <Button
                         key={key}
