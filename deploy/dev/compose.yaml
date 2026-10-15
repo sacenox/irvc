@@ -20,6 +20,28 @@ services:
       - livekit
     restart: unless-stopped
 
+  seed:
+    image: localhost/irvc:dev
+    network_mode: host
+    volumes:
+      - irvc-data:/data
+      - ./seed.sql:/seed.sql:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        i=0
+        until sqlite3 "$$IRVC_DB_PATH" 'SELECT 1 FROM users LIMIT 1' >/dev/null 2>&1; do
+          i=$$((i + 1))
+          [ "$$i" -ge 120 ] && { echo "seed: timed out waiting for db" >&2; exit 1; }
+          sleep 0.5
+        done
+        sqlite3 "$$IRVC_DB_PATH" < /seed.sql
+        echo "seed: test users ready"
+    depends_on:
+      - irvc
+    restart: "no"
+
   livekit:
     image: docker.io/livekit/livekit-server:latest
     network_mode: host

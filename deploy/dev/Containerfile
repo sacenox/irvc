@@ -16,7 +16,7 @@ COPY web/ ./
 RUN npm run build
 
 FROM docker.io/library/alpine:3.21
-RUN apk add --no-cache ca-certificates && adduser -D -u 1000 irvc
+RUN apk add --no-cache ca-certificates sqlite && adduser -D -u 1000 irvc
 WORKDIR /app
 COPY --from=server /out/irvc /app/irvc
 COPY --from=web /src/dist /app/web/dist

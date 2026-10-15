@@ -18,11 +18,18 @@ are `Secure`, and browsers only accept those on `https` or `localhost`.
 State lives in the `irvc-dev_irvc-data` volume (`/data`: `irvc.db`, `media`).
 Reset it with `podman-compose down -v`.
 
-## Invite
+## Test users
 
-The DB starts empty. Create an invite, then open its `/join?token=...` URL:
+A one-shot `seed` service waits for the DB, then inserts test accounts
+(`deploy/dev/seed.sql`). Password for all: `11111111`.
+
+- `sean`, `bananaman`, `wombat`, `moonlord`, `toaster`, `kebab`
+
+Seed passwords are reset on every `up`. To add another invite instead:
 
     podman exec irvc-dev_irvc_1 /app/irvc invite
+
+Then open its `/join?token=...` URL.
 
 ## Frontend dev (HMR)
 
