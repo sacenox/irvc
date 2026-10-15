@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { MicOff, Volume2, VolumeX } from "lucide-react";
+import { MicOff, ScreenShare, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "cn";
 import Dot from "./Dot";
 import type { Voice } from "../lib/voice";
 
@@ -14,8 +15,18 @@ function load(): Record<string, number> {
   }
 }
 
-export default function VoicePeers({ voice, username }: { voice: Voice; username: string }) {
-  const { peers, muted: selfMuted, setPeerVolume, speaking } = voice;
+export default function VoicePeers({
+  voice,
+  username,
+  openShare,
+  onOpenShare,
+}: {
+  voice: Voice;
+  username: string;
+  openShare: string | null;
+  onOpenShare: (id: string) => void;
+}) {
+  const { peers, muted: selfMuted, setPeerVolume, speaking, shares } = voice;
   const [volumes, setVolumes] = useState<Record<string, number>>(load);
   const [muted, setMuted] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
@@ -84,7 +95,20 @@ export default function VoicePeers({ voice, username }: { voice: Voice; username
           )}
         </div>
       ))}
+      {shares.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => onOpenShare(s.id)}
+          className={cn(
+            "flex w-full min-w-0 items-center gap-1.5 text-left text-sm hover:text-sepia",
+            openShare === s.id ? "text-gold" : "text-sepia/70",
+          )}
+        >
+          <ScreenShare size={10} className="shrink-0" />
+          <span className="truncate">{s.name}</span>
+          <span className="shrink-0 text-sepia/40">(screen{s.self ? ", you" : ""})</span>
+        </button>
+      ))}
     </>
   );
 }
-

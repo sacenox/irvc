@@ -8,6 +8,8 @@ import {
   MicOff,
   Moon,
   PhoneOff,
+  ScreenShare,
+  ScreenShareOff,
   Settings,
   Sun,
   UserPlus,
@@ -26,12 +28,18 @@ interface Invite {
   expiresAt: number;
 }
 
+// getDisplayMedia is absent on non-secure origins and on mobile browsers. The
+// button still renders, disabled, so its absence is never a silent mystery.
+const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
+
 export default function Sidebar({
   channels,
   selected,
   onSelect,
   voice,
   voiceRooms,
+  openShare,
+  onOpenShare,
   username,
   users,
   online,
@@ -46,6 +54,8 @@ export default function Sidebar({
   onSelect: (c: Channel) => void;
   voice: Voice;
   voiceRooms: Record<string, string[]>;
+  openShare: string | null;
+  onOpenShare: (id: string) => void;
   username: string;
   users: UserSummary[];
   online: Set<string>;
@@ -90,6 +100,8 @@ export default function Sidebar({
                 channel={c}
                 voice={voice}
                 occupants={voiceRooms[String(c.id)] ?? []}
+                openShare={openShare}
+                onOpenShare={onOpenShare}
                 username={username}
               />
             ))}
@@ -177,11 +189,15 @@ function VoiceChannel({
   channel,
   voice,
   occupants,
+  openShare,
+  onOpenShare,
   username,
 }: {
   channel: Channel;
   voice: Voice;
   occupants: string[];
+  openShare: string | null;
+  onOpenShare: (id: string) => void;
   username: string;
 }) {
   const active = voice.channel?.id === channel.id;
@@ -199,6 +215,23 @@ function VoiceChannel({
               title={voice.muted ? "unmute" : "mute"}
             >
               {voice.muted ? <MicOff /> : <Mic />}
+            </Button>
+            <Button
+              size="icon-xs"
+              variant={voice.sharing ? "secondary" : "ghost"}
+              className={voice.sharing ? "text-gold" : undefined}
+              aria-pressed={voice.sharing}
+              disabled={!canShare}
+              onClick={() => voice.toggleShare()}
+              title={
+                !canShare
+                  ? "screen share needs https (or localhost)"
+                  : voice.sharing
+                    ? "stop sharing"
+                    : "share screen"
+              }
+            >
+              {voice.sharing ? <ScreenShareOff /> : <ScreenShare />}
             </Button>
             <Button size="icon-xs" variant="ghost" onClick={() => voice.leave()} title="leave">
               <PhoneOff />
@@ -222,7 +255,12 @@ function VoiceChannel({
               {voice.status === "connecting" ? "connecting…" : voice.error || "disconnected"}
             </span>
           ) : (
-            <VoicePeers voice={voice} username={username} />
+            <VoicePeers
+              voice={voice}
+              username={username}
+              openShare={openShare}
+              onOpenShare={onOpenShare}
+            />
           )}
         </div>
       )}

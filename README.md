@@ -8,7 +8,7 @@ deployment runbook.
 
 Three processes on one host:
 
-- **livekit-server** — voice only. Ephemeral rooms.
+- **livekit-server** — voice and screen share. Ephemeral rooms.
 - **irvc** (this repo, Go) — API, auth, text chat and presence over WebSocket,
   media uploads, SQLite.
 - **Caddy** — TLS + reverse proxy for the frontend, API, and LiveKit signal.

@@ -3,7 +3,7 @@ import { HeadphoneOff, Headphones } from "lucide-react";
 import { Room } from "livekit-client";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import type { AudioPresetName, FontSize, Settings } from "../lib/settings";
+import type { AudioPresetName, FontSize, ScreenShareQuality, Settings } from "../lib/settings";
 import type { Theme } from "../lib/theme";
 import { useMicPreview, type Voice } from "../lib/voice";
 
@@ -153,11 +153,23 @@ export default function SettingsPanel({
         </Group>
 
         <Group label="Quality">
-          <Select
-            value={settings.audioPreset}
-            onChange={(v) => update({ audioPreset: v as AudioPresetName })}
-            options={presets}
-          />
+          <Field label="audio">
+            <Select
+              value={settings.audioPreset}
+              onChange={(v) => update({ audioPreset: v as AudioPresetName })}
+              options={presets}
+            />
+          </Field>
+          <Field label="screen share">
+            <Select
+              value={settings.screenShareQuality}
+              onChange={(v) => update({ screenShareQuality: v as ScreenShareQuality })}
+              options={[
+                { value: "720p", label: "720p · 30 fps" },
+                { value: "1080p", label: "1080p · 30 fps" },
+              ]}
+            />
+          </Field>
         </Group>
 
         <Group label="Microphone processing">

@@ -13,13 +13,14 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 - Text channels with persisted history (IRC-like), GFM markdown, multiline compose, mentions.
 - Image attachments (raster only), stored on disk.
 - Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.
+- Screen sharing into a voice channel, with tab/system audio, simulcast, and a 720p/1080p quality choice.
 - Presence: online/offline, plus who is in each voice channel without joining.
 - Client themes, font size, per-user voice settings.
 - One server per deployment, seeded with one text and one voice channel.
 
 **Out (now):**
 - Large scale, multi-node, clustering.
-- Recording, screen share, video, DMs.
+- Recording, video, DMs.
 - Message editing/deletion/search, channel CRUD.
 - Email, OAuth, passkeys.
 - Backups.
@@ -29,7 +30,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 
 One VPS, three processes:
 
-- **LiveKit** — self-hosted, voice only. Own ports: signal `7880`, TCP `7881`, media `50000-60000/udp`. Media ports exposed raw, not proxied.
+- **LiveKit** — self-hosted, voice and screen share. Own ports: signal `7880`, TCP `7881`, media `50000-60000/udp`. Media ports exposed raw, not proxied.
 - **Gin server (Go)** — API, auth, invite/session handling, LiveKit token minting, text chat and presence over WebSocket, media upload/serve, SQLite.
 - **Caddy** — TLS + reverse proxy for frontend and API. Terminates TLS; proxies `wss` to LiveKit signal.
 
@@ -73,7 +74,8 @@ messages (id, channel_id, user_id, body, created_at)
 - **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel.
 - **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide.
 - **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.
-- **Voice controls:** mute, deafen (local only), per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone.
+- **Screen share:** any participant may publish a screen share (with tab or system audio) into the room. It is not persisted and not recorded. Shares are visible only to participants, not to the rest of the server. Share audio plays through the normal audio path, so deafen and per-peer volume apply.
+- **Voice controls:** mute, deafen (local only), per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone, start/stop screen share.
 - **Presence:** a user is online while their WS connection is up; otherwise offline. Voice occupancy rides along with presence. No invisible mode.
 - **Settings:** themes, font size, and voice preferences are client-side (device-local). Voice occupancy is server-side only.
 
@@ -83,9 +85,9 @@ messages (id, channel_id, user_id, body, created_at)
 - Two themes (`80s-nicotine` sepia default, `tuxedo` grayscale) × light/dark, applied before first paint. Monospace, minimalist, functional.
 - Layout:
   - Left sidebar: text channels, voice channels (with occupants), then users (online/offline). Collapsible; overlays on mobile.
-  - Focus pane: chat for the selected text channel, or the settings pane.
-  - Header: sidebar toggle, current channel or settings title.
-- Settings pane: theme, font size, sounds, deafen, voice-activation meter/threshold, devices, quality, mic processing.
+  - Focus pane: chat for the selected text channel, the settings pane, or a screen share.
+  - Header: sidebar toggle, current channel, settings, or the screen share being watched.
+- Settings pane: theme, font size, sounds, deafen, voice-activation meter/threshold, devices, quality (audio and screen share), mic processing.
 
 ## Config
 

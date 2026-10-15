@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Hash, Menu, Settings } from "lucide-react";
+import { Hash, Menu, ScreenShare, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
 import { usePresence } from "../lib/presence";
@@ -8,6 +8,7 @@ import { useTheme } from "../lib/theme";
 import { useVoice } from "../lib/voice";
 import type { Channel, Message, User, UserSummary } from "../lib/types";
 import ChatPane from "../components/ChatPane";
+import ScreenShareView from "../components/ScreenShare";
 import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
 
@@ -20,6 +21,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openShare, setOpenShare] = useState<string | null>(null);
   const desktop = useRef(window.matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
@@ -46,10 +48,14 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     send(voiceMessage(voiceChannel.current));
   });
   const { mode, toggleMode, theme, setTheme } = useTheme();
+  // The watched share lives in the LiveKit room, so it vanishes when the sharer
+  // stops; the pane then falls back to the selected text channel.
+  const share = voice.shares.find((s) => s.id === openShare) ?? null;
 
   useEffect(() => {
-    document.documentElement.style.fontSize =
-      { default: "", normal: "16px", large: "18px" }[settings.fontSize];
+    document.documentElement.style.fontSize = { default: "", normal: "16px", large: "18px" }[
+      settings.fontSize
+    ];
   }, [settings.fontSize]);
 
   useEffect(() => {
@@ -80,6 +86,13 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   function selectChannel(c: Channel) {
     setSelected(c);
+    setOpenShare(null);
+    setSettingsOpen(false);
+    if (!desktop.current) setSidebarOpen(false);
+  }
+
+  function selectShare(id: string) {
+    setOpenShare(id);
     setSettingsOpen(false);
     if (!desktop.current) setSidebarOpen(false);
   }
@@ -109,6 +122,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           onSelect={selectChannel}
           voice={voice}
           voiceRooms={voiceRooms}
+          openShare={openShare}
+          onOpenShare={selectShare}
           username={user.username}
           users={users}
           online={online}
@@ -135,6 +150,11 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 <Settings size={14} />
                 Settings
               </>
+            ) : share ? (
+              <>
+                <ScreenShare size={14} />
+                {share.self ? "your screen" : `${share.name}'s screen`}
+              </>
             ) : (
               <>
                 {selected && <Hash size={14} />}
@@ -156,6 +176,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             theme={theme}
             onThemeChange={setTheme}
           />
+        ) : share ? (
+          <ScreenShareView track={share.track} />
         ) : (
           <ChatPane channel={selected} messages={messages} users={users} username={user.username} />
         )}

@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AudioPresets, Room, RoomEvent, Track } from "livekit-client";
+import {
+  AudioPresets,
+  Room,
+  RoomEvent,
+  ScreenSharePresets,
+  Track,
+  VideoPresets,
+} from "livekit-client";
 import type {
   AudioCaptureOptions,
   AudioProcessorOptions,
   Participant,
+  ScreenShareCaptureOptions,
   TrackProcessor,
+  TrackPublishOptions,
 } from "livekit-client";
 import { api } from "./api";
 import type { Settings } from "./settings";
@@ -163,6 +172,57 @@ function publish(s: Settings) {
   return { audioPreset: AudioPresets[s.audioPreset] };
 }
 
+// screenShare maps the quality setting to a capture resolution and encoding.
+// The simulcast layers are ordered low to high, below the preset's own layer.
+const screenSharePresets = {
+  "720p": ScreenSharePresets.h720fps30,
+  "1080p": ScreenSharePresets.h1080fps30,
+};
+const screenShareLayers = {
+  "720p": [VideoPresets.h180, VideoPresets.h360],
+  "1080p": [VideoPresets.h360, VideoPresets.h720],
+};
+
+function screenShare(s: Settings): [ScreenShareCaptureOptions, TrackPublishOptions] {
+  const preset = screenSharePresets[s.screenShareQuality];
+  return [
+    { audio: true, resolution: preset.resolution },
+    {
+      screenShareEncoding: preset.encoding,
+      screenShareSimulcastLayers: screenShareLayers[s.screenShareQuality],
+    },
+  ];
+}
+
+// A Share is a screen-share publication, ours or a peer's. LiveKit models it as
+// a track on a participant rather than a participant, so the sidebar synthesizes
+// one row per share.
+export interface Share {
+  id: string;
+  name: string;
+  self: boolean;
+  track: Track;
+}
+
+function sharesOf(room: Room): Share[] {
+  const shares: Share[] = [];
+  const collect = (p: Participant, self: boolean) => {
+    for (const pub of p.trackPublications.values()) {
+      if (pub.source === Track.Source.ScreenShare && pub.track?.kind === Track.Kind.Video) {
+        shares.push({
+          id: `${p.identity}:${pub.trackSid}`,
+          name: p.name || p.identity,
+          self,
+          track: pub.track,
+        });
+      }
+    }
+  };
+  collect(room.localParticipant, true);
+  for (const p of room.remoteParticipants.values()) collect(p, false);
+  return shares;
+}
+
 // micSignature identifies the applied capture + encoding config, so live
 // changes can be detected without republishing on every render.
 function micSignature(s: Settings): string {
@@ -184,10 +244,13 @@ export interface Voice {
   error: string;
   peers: string[];
   speaking: string[];
+  shares: Share[];
+  sharing: boolean;
   muted: boolean;
   join: (c: Channel) => void;
   leave: () => void;
   toggleMute: () => void;
+  toggleShare: () => void;
   setPeerVolume: (name: string, volume: number) => void;
   micLevel: () => number;
 }
@@ -196,15 +259,13 @@ export interface Voice {
 // switching panes. Chat holds it and passes it to the sidebar controls.
 // Voice settings are read from a ref so `join` always uses the latest values,
 // while live changes (device, processing, quality) are applied via effects.
-export function useVoice(
-  settings: Settings,
-  onVoice?: (channelID: number | null) => void,
-): Voice {
+export function useVoice(settings: Settings, onVoice?: (channelID: number | null) => void): Voice {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState("");
   const [peers, setPeers] = useState<string[]>([]);
   const [speaking, setSpeaking] = useState<string[]>([]);
+  const [shares, setShares] = useState<Share[]>([]);
   const [muted, setMuted] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement[]>([]);
@@ -238,6 +299,7 @@ export function useVoice(
     setError("");
     setPeers([]);
     setSpeaking([]);
+    setShares([]);
     setMuted(false);
     onVoiceRef.current?.(null);
   }, []);
@@ -257,8 +319,10 @@ export function useVoice(
           publishDefaults: publish(s),
         });
         roomRef.current = room;
-        const sync = () =>
+        const sync = () => {
           setPeers([...room.remoteParticipants.values()].map((p) => p.name || p.identity));
+          setShares(sharesOf(room));
+        };
         room.on(RoomEvent.ParticipantConnected, () => {
           if (readyRef.current && settingsRef.current.joinSound) beep(440);
           sync();
@@ -276,6 +340,18 @@ export function useVoice(
           el.muted = settingsRef.current.deafened;
           audioRef.current.push(el);
         });
+        // Screen shares surface as a track on a participant, so every event that
+        // can add or drop one — publish, subscribe, unpublish — resyncs the rows.
+        for (const ev of [
+          RoomEvent.TrackPublished,
+          RoomEvent.TrackUnpublished,
+          RoomEvent.TrackSubscribed,
+          RoomEvent.TrackUnsubscribed,
+          RoomEvent.LocalTrackPublished,
+          RoomEvent.LocalTrackUnpublished,
+        ]) {
+          room.on(ev, sync);
+        }
         room.on(RoomEvent.Disconnected, () => {
           if (roomRef.current === room) {
             roomRef.current = null;
@@ -352,6 +428,20 @@ export function useVoice(
     setMuted(next);
   }, [muted]);
 
+  const toggleShare = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const on = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    const [capture, publishOptions] = screenShare(settingsRef.current);
+    try {
+      await room.localParticipant.setScreenShareEnabled(!on, capture, publishOptions);
+    } catch (err) {
+      // Dismissing the picker rejects with NotAllowedError; that is not a fault.
+      if ((err as Error).name !== "NotAllowedError") setError((err as Error).message);
+    }
+    setShares(sharesOf(room));
+  }, []);
+
   const setPeerVolume = useCallback((name: string, volume: number) => {
     const room = roomRef.current;
     if (!room) return;
@@ -373,10 +463,13 @@ export function useVoice(
     error,
     peers,
     speaking,
+    shares,
+    sharing: shares.some((s) => s.self),
     muted,
     join,
     leave,
     toggleMute,
+    toggleShare,
     setPeerVolume,
     micLevel,
   };
