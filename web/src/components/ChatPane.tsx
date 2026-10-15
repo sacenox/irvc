@@ -338,6 +338,9 @@ export default function ChatPane({
                     <div className="text-sepia/40">
                       {clock(m.createdAt)}
                       {!action && <span className="text-gold/90"> {m.username}</span>}
+                      {m.editedAt ? (
+                        <span className="ml-1 text-xs text-sepia/40">(edited)</span>
+                      ) : null}
                     </div>
                     {editing ? (
                       <textarea
@@ -363,9 +366,6 @@ export default function ChatPane({
                           collapsed={collapsed.has(m.id)}
                           onToggle={() => toggleImage(m.id)}
                         />
-                        {m.editedAt ? (
-                          <span className="text-xs text-sepia/40">(edited)</span>
-                        ) : null}
                       </div>
                     )}
                   </>
