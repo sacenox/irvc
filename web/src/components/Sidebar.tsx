@@ -15,6 +15,7 @@ import {
   Sun,
   UserPlus,
   Volume2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
@@ -37,6 +38,7 @@ export default function Sidebar({
   channels,
   selected,
   onSelect,
+  onCloseDM,
   onSelectUser,
   voice,
   voiceRooms,
@@ -54,6 +56,7 @@ export default function Sidebar({
   channels: Channel[];
   selected: Channel | null;
   onSelect: (c: Channel) => void;
+  onCloseDM: (c: Channel) => void;
   onSelectUser: (u: UserSummary) => void;
   voice: Voice;
   voiceRooms: Record<string, string[]>;
@@ -115,6 +118,7 @@ export default function Sidebar({
             channels={channels.filter((c) => c.type === "dm")}
             selected={selected}
             onSelect={onSelect}
+            onClose={onCloseDM}
             icon={<AtSign size={14} />}
           />
         )}
@@ -171,27 +175,41 @@ function Group({
   channels,
   selected,
   onSelect,
+  onClose,
   icon,
 }: {
   label: string;
   channels: Channel[];
   selected: Channel | null;
   onSelect: (c: Channel) => void;
+  onClose?: (c: Channel) => void;
   icon: ReactNode;
 }) {
   return (
     <div>
       <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-sepia/40">{label}</div>
       {channels.map((c) => (
-        <Button
-          key={c.id}
-          variant={selected?.id === c.id ? "secondary" : "ghost"}
-          onClick={() => onSelect(c)}
-          className="w-full justify-start gap-2 font-normal"
-        >
-          {icon}
-          {c.name}
-        </Button>
+        <div key={c.id} className="group/dm relative">
+          <Button
+            variant={selected?.id === c.id ? "secondary" : "ghost"}
+            onClick={() => onSelect(c)}
+            className="w-full justify-start gap-2 pr-7 font-normal"
+          >
+            {icon}
+            {c.name}
+          </Button>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => onClose(c)}
+              title="close dm"
+              className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
+            >
+              <X />
+            </Button>
+          )}
+        </div>
       ))}
     </div>
   );

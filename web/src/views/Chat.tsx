@@ -13,9 +13,19 @@ import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
 
 const voiceMessage = (channelId: number) => JSON.stringify({ type: "voice", channelId });
+const hiddenDmsKey = "irvc.hiddenDms";
+
+function loadHiddenDms(): number[] {
+  try {
+    return JSON.parse(localStorage.getItem(hiddenDmsKey) ?? "[]");
+  } catch {
+    return [];
+  }
+}
 
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [hiddenDms, setHiddenDms] = useState<number[]>(loadHiddenDms);
   const [selected, setSelected] = useState<Channel | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
@@ -41,7 +51,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         if (ev.type === "message") {
           setChannels((cs) => {
             if (!cs.some((c) => c.id === ev.message!.channelId)) {
-              api<Channel[]>("/channels").then(setChannels).catch(() => {});
+              api<Channel[]>("/channels")
+                .then(setChannels)
+                .catch(() => {});
             }
             return cs;
           });
@@ -75,6 +87,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   }, [settings.fontSize]);
 
   useEffect(() => {
+    localStorage.setItem(hiddenDmsKey, JSON.stringify(hiddenDms));
+  }, [hiddenDms]);
+
+  useEffect(() => {
     selectedId.current = selected?.id ?? null;
   }, [selected]);
 
@@ -104,9 +120,17 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     try {
       const dm = await api<Channel>(`/dms/${u.id}`, { method: "POST" });
       setChannels((cs) => (cs.some((c) => c.id === dm.id) ? cs : [...cs, dm]));
+      setHiddenDms((ids) => ids.filter((id) => id !== dm.id));
       selectChannel(dm);
     } catch {
       // ignore
+    }
+  }
+
+  function closeDM(dm: Channel) {
+    setHiddenDms((ids) => (ids.includes(dm.id) ? ids : [...ids, dm.id]));
+    if (selected?.id === dm.id) {
+      setSelected(channels.find((c) => c.type === "text") ?? null);
     }
   }
 
@@ -143,9 +167,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       )}
       {sidebarOpen && (
         <Sidebar
-          channels={channels}
+          channels={channels.filter((c) => c.type !== "dm" || !hiddenDms.includes(c.id))}
           selected={selected}
           onSelect={selectChannel}
+          onCloseDM={closeDM}
           onSelectUser={selectUser}
           voice={voice}
           voiceRooms={voiceRooms}
