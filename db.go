@@ -16,10 +16,11 @@ type User struct {
 }
 
 type Channel struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Position int    `json:"position"`
+	ID        int64  `json:"id"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Position  int    `json:"position"`
+	Permanent bool   `json:"permanent"`
 }
 
 type Message struct {
@@ -70,7 +71,8 @@ CREATE TABLE IF NOT EXISTS channels (
 	type       TEXT NOT NULL,
 	name       TEXT NOT NULL,
 	position   INTEGER NOT NULL,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	permanent  INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +90,7 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_dm ON channels(name) WHERE type = 'dm';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_name ON channels(type, name) WHERE type != 'dm';
 `
 
 func migrate(db *sql.DB) {
@@ -95,6 +98,8 @@ func migrate(db *sql.DB) {
 		log.Fatalf("migrate: %v", err)
 	}
 	db.Exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`)
+	db.Exec(`ALTER TABLE channels ADD COLUMN permanent INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`UPDATE channels SET permanent = 1 WHERE name = 'general' AND type IN ('text', 'voice')`)
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM channels WHERE type != 'dm'`).Scan(&n); err != nil {
 		log.Fatalf("count channels: %v", err)
@@ -112,7 +117,7 @@ func migrate(db *sql.DB) {
 	}
 	for _, c := range seed {
 		if _, err := db.Exec(
-			`INSERT INTO channels (type, name, position, created_at) VALUES (?, ?, ?, ?)`,
+			`INSERT INTO channels (type, name, position, created_at, permanent) VALUES (?, ?, ?, ?, 1)`,
 			c.kind, c.name, c.pos, now,
 		); err != nil {
 			log.Fatalf("seed channels: %v", err)

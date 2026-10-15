@@ -36,13 +36,26 @@ func (s *Server) notifyChannel(channelType, channelName string, ev event) {
 	s.hub.broadcast(ev)
 }
 
+func validChannelName(name string) bool {
+	if len(name) < 1 || len(name) > 32 {
+		return false
+	}
+	for _, r := range name {
+		ok := r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) handleChannels(c *gin.Context) {
 	user := c.MustGet("user").(User)
 	users := map[int64]string{}
 	for _, u := range s.hub.roster() {
 		users[u.ID] = u.Username
 	}
-	rows, err := s.db.Query(`SELECT id, type, name, position FROM channels ORDER BY position, id`)
+	rows, err := s.db.Query(`SELECT id, type, name, position, permanent FROM channels ORDER BY position, id`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 		return
@@ -51,7 +64,7 @@ func (s *Server) handleChannels(c *gin.Context) {
 	channels := []Channel{}
 	for rows.Next() {
 		var ch Channel
-		if err := rows.Scan(&ch.ID, &ch.Type, &ch.Name, &ch.Position); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Type, &ch.Name, &ch.Position, &ch.Permanent); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 			return
 		}
@@ -72,6 +85,89 @@ func (s *Server) handleChannels(c *gin.Context) {
 		channels = append(channels, ch)
 	}
 	c.JSON(http.StatusOK, channels)
+}
+
+type createChannelRequest struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
+func (s *Server) handleCreateChannel(c *gin.Context) {
+	var req createChannelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if req.Type != "text" && req.Type != "voice" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel type"})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if !validChannelName(name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel name"})
+		return
+	}
+	var pos int
+	if err := s.db.QueryRow(
+		`SELECT COALESCE(MAX(position), 0) + 1 FROM channels WHERE type = ?`, req.Type,
+	).Scan(&pos); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	res, err := s.db.Exec(
+		`INSERT INTO channels (type, name, position, created_at) VALUES (?, ?, ?, ?)`,
+		req.Type, name, pos, time.Now().Unix(),
+	)
+	if err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "channel already exists"})
+		return
+	}
+	id, _ := res.LastInsertId()
+	ch := Channel{ID: id, Type: req.Type, Name: name, Position: pos}
+	s.hub.broadcast(event{Type: "channel", Channel: &ch})
+	c.JSON(http.StatusOK, ch)
+}
+
+func (s *Server) handleDeleteChannel(c *gin.Context) {
+	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
+		return
+	}
+	var ch Channel
+	err = s.db.QueryRow(
+		`SELECT id, type, name, position, permanent FROM channels WHERE id = ?`, channelID,
+	).Scan(&ch.ID, &ch.Type, &ch.Name, &ch.Position, &ch.Permanent)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "channel not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	if ch.Type == "dm" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "not a channel"})
+		return
+	}
+	if ch.Permanent {
+		c.JSON(http.StatusForbidden, gin.H{"error": "channel is permanent"})
+		return
+	}
+	if ch.Type == "voice" && s.hub.voiceOccupied(channelID) {
+		c.JSON(http.StatusConflict, gin.H{"error": "channel is not empty"})
+		return
+	}
+	if _, err := s.db.Exec(`DELETE FROM messages WHERE channel_id = ?`, channelID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	if _, err := s.db.Exec(`DELETE FROM channels WHERE id = ?`, channelID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	s.hub.broadcast(event{Type: "channel_delete", ChannelID: channelID})
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleOpenDM(c *gin.Context) {

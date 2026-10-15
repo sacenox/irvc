@@ -14,6 +14,7 @@ export interface Channel {
   type: "text" | "voice" | "dm";
   name: string;
   position: number;
+  permanent: boolean;
 }
 
 export type Reaction = "+1" | "-1" | "heart" | "laugh";
@@ -30,9 +31,18 @@ export interface Message {
 }
 
 export interface WSEvent {
-  type: "message" | "message_edit" | "message_delete" | "presence" | "pong";
+  type:
+    | "message"
+    | "message_edit"
+    | "message_delete"
+    | "presence"
+    | "pong"
+    | "channel"
+    | "channel_delete";
   message?: Message;
   users?: string[];
   roster?: UserSummary[];
   voice?: Record<string, string[]>;
+  channel?: Channel;
+  channelId?: number;
 }

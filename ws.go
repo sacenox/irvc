@@ -16,11 +16,13 @@ import (
 )
 
 type event struct {
-	Type    string              `json:"type"`
-	Message *Message            `json:"message,omitempty"`
-	Users   []string            `json:"users,omitempty"`
-	Roster  []userSummary       `json:"roster,omitempty"`
-	Voice   map[string][]string `json:"voice,omitempty"`
+	Type      string              `json:"type"`
+	Message   *Message            `json:"message,omitempty"`
+	Users     []string            `json:"users,omitempty"`
+	Roster    []userSummary       `json:"roster,omitempty"`
+	Voice     map[string][]string `json:"voice,omitempty"`
+	Channel   *Channel            `json:"channel,omitempty"`
+	ChannelID int64               `json:"channelId,omitempty"`
 }
 
 // wsIn is a message sent from a client over the socket.
@@ -170,6 +172,12 @@ func (h *hub) roster() []userSummary {
 		users = append(users, u)
 	}
 	return users
+}
+
+func (h *hub) voiceOccupied(channelID int64) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.voice[channelID]) > 0
 }
 
 func (h *hub) voiceUsers() map[string][]string {

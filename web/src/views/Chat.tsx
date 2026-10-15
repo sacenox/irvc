@@ -47,6 +47,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setOnline(new Set(ev.users ?? []));
         if (ev.roster) setUsers(ev.roster);
         setVoiceRooms(ev.voice ?? {});
+      } else if (ev.type === "channel" && ev.channel) {
+        setChannels((cs) => (cs.some((c) => c.id === ev.channel!.id) ? cs : [...cs, ev.channel!]));
+      } else if (ev.type === "channel_delete" && ev.channelId) {
+        setChannels((cs) => cs.filter((c) => c.id !== ev.channelId));
       } else if (ev.message) {
         if (ev.type === "message") {
           setChannels((cs) => {
@@ -93,6 +97,12 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
   }, [selected]);
+
+  useEffect(() => {
+    if (selected && !channels.some((c) => c.id === selected.id)) {
+      setSelected(channels.find((c) => c.type === "text") ?? channels[0] ?? null);
+    }
+  }, [channels, selected]);
 
   useEffect(() => {
     api<Channel[]>("/channels")

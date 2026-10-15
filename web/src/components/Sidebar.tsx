@@ -9,15 +9,18 @@ import {
   MicOff,
   Moon,
   PhoneOff,
+  Plus,
   ScreenShare,
   ScreenShareOff,
   Settings,
   Sun,
+  Trash2,
   UserPlus,
   Volume2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "../lib/api";
 import type { Channel, UserSummary } from "../lib/types";
 import type { Mode } from "../lib/theme";
@@ -33,6 +36,8 @@ interface Invite {
 // getDisplayMedia is absent on non-secure origins and on mobile browsers. The
 // button still renders, disabled, so its absence is never a silent mystery.
 const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
+
+const byName = (a: Channel, b: Channel) => a.name.localeCompare(b.name);
 
 export default function Sidebar({
   channels,
@@ -73,6 +78,29 @@ export default function Sidebar({
 }) {
   const [label, setLabel] = useState("create invite");
   const [showUsers, setShowUsers] = useState(true);
+  const [creating, setCreating] = useState<"text" | "voice" | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const texts = channels.filter((c) => c.type === "text").sort(byName);
+  const voices = channels.filter((c) => c.type === "voice").sort(byName);
+  const dms = channels.filter((c) => c.type === "dm").sort(byName);
+
+  async function createChannel(type: "text" | "voice") {
+    const name = draft.trim();
+    if (!name) return;
+    try {
+      await api("/channels", { method: "POST", body: JSON.stringify({ type, name }) });
+      setCreating(null);
+      setDraft("");
+    } catch {
+      return;
+    }
+  }
+
+  async function deleteChannel(c: Channel) {
+    if (c.type === "text" && !window.confirm(`Delete #${c.name}? This is irreversible.`)) return;
+    await api(`/channels/${c.id}`, { method: "DELETE" }).catch(() => {});
+  }
 
   async function invite() {
     try {
@@ -91,31 +119,64 @@ export default function Sidebar({
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
         <Group
           label="Text"
-          channels={channels.filter((c) => c.type === "text")}
+          channels={texts}
           selected={selected}
           onSelect={onSelect}
+          onDelete={deleteChannel}
+          onCreate={() => {
+            setCreating("text");
+            setDraft("");
+          }}
           icon={<Hash size={14} />}
         />
+        {creating === "text" && (
+          <ChannelForm
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => createChannel("text")}
+            onCancel={() => setCreating(null)}
+          />
+        )}
         <div>
-          <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-sepia/40">Voice</div>
-          {channels
-            .filter((c) => c.type === "voice")
-            .map((c) => (
-              <VoiceChannel
-                key={c.id}
-                channel={c}
-                voice={voice}
-                occupants={voiceRooms[String(c.id)] ?? []}
-                openShare={openShare}
-                onOpenShare={onOpenShare}
-                username={username}
-              />
-            ))}
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-[10px] uppercase tracking-widest text-sepia/40">Voice</span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => {
+                setCreating("voice");
+                setDraft("");
+              }}
+              title="new voice channel"
+            >
+              <Plus />
+            </Button>
+          </div>
+          {voices.map((c) => (
+            <VoiceChannel
+              key={c.id}
+              channel={c}
+              voice={voice}
+              occupants={voiceRooms[String(c.id)] ?? []}
+              openShare={openShare}
+              onOpenShare={onOpenShare}
+              username={username}
+              onDelete={deleteChannel}
+            />
+          ))}
         </div>
-        {channels.some((c) => c.type === "dm") && (
+        {creating === "voice" && (
+          <ChannelForm
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => createChannel("voice")}
+            onCancel={() => setCreating(null)}
+          />
+        )}
+        {dms.length > 0 && (
           <Group
             label="DMs"
-            channels={channels.filter((c) => c.type === "dm")}
+            channels={dms}
             selected={selected}
             onSelect={onSelect}
             onClose={onCloseDM}
@@ -176,6 +237,8 @@ function Group({
   selected,
   onSelect,
   onClose,
+  onDelete,
+  onCreate,
   icon,
 }: {
   label: string;
@@ -183,11 +246,25 @@ function Group({
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   onClose?: (c: Channel) => void;
+  onDelete?: (c: Channel) => void;
+  onCreate?: () => void;
   icon: ReactNode;
 }) {
   return (
     <div>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-sepia/40">{label}</div>
+      <div className="flex items-center justify-between px-2 py-1">
+        <span className="text-[10px] uppercase tracking-widest text-sepia/40">{label}</span>
+        {onCreate && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onCreate}
+            title={`new ${label.toLowerCase()} channel`}
+          >
+            <Plus />
+          </Button>
+        )}
+      </div>
       {channels.map((c) => (
         <div key={c.id} className="group/dm relative">
           <Button
@@ -209,9 +286,52 @@ function Group({
               <X />
             </Button>
           )}
+          {onDelete && !c.permanent && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => onDelete(c)}
+              title="delete channel"
+              className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
+            >
+              <Trash2 />
+            </Button>
+          )}
         </div>
       ))}
     </div>
+  );
+}
+
+function ChannelForm({
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form
+      className="px-2 py-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+    >
+      <Input
+        autoFocus
+        value={value}
+        placeholder="channel name"
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+    </form>
   );
 }
 
@@ -222,6 +342,7 @@ function VoiceChannel({
   openShare,
   onOpenShare,
   username,
+  onDelete,
 }: {
   channel: Channel;
   voice: Voice;
@@ -229,6 +350,7 @@ function VoiceChannel({
   openShare: string | null;
   onOpenShare: (id: string) => void;
   username: string;
+  onDelete: (c: Channel) => void;
 }) {
   const active = voice.channel?.id === channel.id;
   return (
@@ -275,6 +397,16 @@ function VoiceChannel({
             onClick={() => voice.join(channel)}
           >
             join
+          </Button>
+        )}
+        {!channel.permanent && occupants.length === 0 && (
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            onClick={() => onDelete(channel)}
+            title="delete channel"
+          >
+            <Trash2 />
           </Button>
         )}
       </div>
