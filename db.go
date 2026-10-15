@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS messages (
 	edited_at  INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_dm ON channels(name) WHERE type = 'dm';
 `
 
 func migrate(db *sql.DB) {
@@ -88,7 +89,7 @@ func migrate(db *sql.DB) {
 	}
 	db.Exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`)
 	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM channels`).Scan(&n); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM channels WHERE type != 'dm'`).Scan(&n); err != nil {
 		log.Fatalf("count channels: %v", err)
 	}
 	if n > 0 {

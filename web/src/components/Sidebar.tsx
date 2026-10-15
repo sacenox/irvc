@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  AtSign,
   ChevronDown,
   ChevronRight,
   Hash,
@@ -36,6 +37,7 @@ export default function Sidebar({
   channels,
   selected,
   onSelect,
+  onSelectUser,
   voice,
   voiceRooms,
   openShare,
@@ -52,6 +54,7 @@ export default function Sidebar({
   channels: Channel[];
   selected: Channel | null;
   onSelect: (c: Channel) => void;
+  onSelectUser: (u: UserSummary) => void;
   voice: Voice;
   voiceRooms: Record<string, string[]>;
   openShare: string | null;
@@ -106,6 +109,15 @@ export default function Sidebar({
               />
             ))}
         </div>
+        {channels.some((c) => c.type === "dm") && (
+          <Group
+            label="DMs"
+            channels={channels.filter((c) => c.type === "dm")}
+            selected={selected}
+            onSelect={onSelect}
+            icon={<AtSign size={14} />}
+          />
+        )}
         <div>
           <button
             type="button"
@@ -115,7 +127,7 @@ export default function Sidebar({
             {showUsers ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             Users
           </button>
-          {showUsers && <UserList users={users} online={online} />}
+          {showUsers && <UserList users={users} online={online} onSelectUser={onSelectUser} />}
         </div>
       </nav>
       <div className="space-y-2 p-2">

@@ -10,7 +10,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 
 **In:**
 - Server-side accounts, invite-only.
-- Text channels with persisted history (IRC-like), GFM markdown, multiline compose, mentions, message editing and deletion.
+- Text channels and 1-on-1 DMs with persisted history (IRC-like), GFM markdown, multiline compose, mentions, message editing and deletion.
 - Image attachments (raster only), stored on disk.
 - Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.
 - Screen sharing into a voice channel, with tab/system audio, simulcast, and a 720p/1080p quality choice.
@@ -20,7 +20,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 
 **Out (now):**
 - Large scale, multi-node, clustering.
-- Recording, video, DMs.
+- Recording, video.
 - Message search, channel CRUD.
 - Email, OAuth, passkeys.
 - Backups.
@@ -58,17 +58,18 @@ WAL mode, `busy_timeout`. One file, the only state; uploaded media lives in the 
 users    (id, username, pass_hash, created_at)
 invites  (token, created_by, expires_at, used_by, used_at)
 sessions (id, user_id, expires_at)
-channels (id, type, name, position, created_at)   -- type: text | voice
+channels (id, type, name, position, created_at)   -- type: text | voice | dm
 messages (id, channel_id, user_id, body, created_at, edited_at)
 ```
 
 - Messages are returned joined with their author's username.
 - Seed: one text channel `#general`, one voice channel `general`.
+- DMs: `type = 'dm'` channels with canonical name `u:<min_id>:<max_id>`, resolved to the peer's username for each participant.
 - Uploaded images: random names, raster only (no SVG/HTML), served with `nosniff`.
 
 ## Behavior
 
-- **Channels:** seeded only (`#general` text, `general` voice). Ordered by `position`. CRUD is out of scope.
+- **Channels:** seeded (`#general` text, `general` voice) plus on-demand 1-on-1 DMs opened by clicking a user. Ordered by `position`. Public channel CRUD is out of scope.
 - **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
 - **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
 - **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel.
@@ -84,8 +85,8 @@ messages (id, channel_id, user_id, body, created_at, edited_at)
 - React, modern. oxlint + oxfmt. Tailwind + Shadcn. LiveKit client.
 - Two themes (`80s-nicotine` sepia default, `tuxedo` grayscale) × light/dark, applied before first paint. Monospace, minimalist, functional.
 - Layout:
-  - Left sidebar: text channels, voice channels (with occupants), then users (online/offline). Collapsible; overlays on mobile.
-  - Focus pane: chat for the selected text channel, the settings pane, or a screen share.
+  - Left sidebar: text channels, voice channels (with occupants), DMs, then users (online/offline). Collapsible; overlays on mobile.
+  - Focus pane: chat for the selected text channel or DM, the settings pane, or a screen share.
   - Header: sidebar toggle, current channel, settings, or the screen share being watched.
 - Settings pane: theme, font size, sounds, deafen, voice-activation meter/threshold, devices, quality (audio and screen share), mic processing.
 

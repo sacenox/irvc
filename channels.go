@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,7 +11,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func dmName(u1, u2 int64) string {
+	if u1 > u2 {
+		u1, u2 = u2, u1
+	}
+	return fmt.Sprintf("u:%d:%d", u1, u2)
+}
+
+func parseDM(name string) (int64, int64, bool) {
+	var u1, u2 int64
+	if _, err := fmt.Sscanf(name, "u:%d:%d", &u1, &u2); err != nil {
+		return 0, 0, false
+	}
+	return u1, u2, true
+}
+
+func (s *Server) notifyChannel(channelType, channelName string, ev event) {
+	if channelType == "dm" {
+		if u1, u2, ok := parseDM(channelName); ok {
+			s.hub.sendTo(ev, u1, u2)
+		}
+		return
+	}
+	s.hub.broadcast(ev)
+}
+
 func (s *Server) handleChannels(c *gin.Context) {
+	user := c.MustGet("user").(User)
+	users := map[int64]string{}
+	for _, u := range s.hub.roster() {
+		users[u.ID] = u.Username
+	}
 	rows, err := s.db.Query(`SELECT id, type, name, position FROM channels ORDER BY position, id`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
@@ -24,15 +55,88 @@ func (s *Server) handleChannels(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 			return
 		}
+		if ch.Type == "dm" {
+			u1, u2, ok := parseDM(ch.Name)
+			if !ok || (u1 != user.ID && u2 != user.ID) {
+				continue
+			}
+			peerID := u1
+			if u1 == user.ID {
+				peerID = u2
+			}
+			ch.Name = users[peerID]
+			if ch.Name == "" {
+				continue
+			}
+		}
 		channels = append(channels, ch)
 	}
 	c.JSON(http.StatusOK, channels)
+}
+
+func (s *Server) handleOpenDM(c *gin.Context) {
+	peerID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad user"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	var peerName string
+	if err := s.db.QueryRow(`SELECT username FROM users WHERE id = ?`, peerID).Scan(&peerName); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	name := dmName(user.ID, peerID)
+	s.db.Exec(
+		`INSERT OR IGNORE INTO channels (type, name, position, created_at) VALUES ('dm', ?, 0, ?)`,
+		name, time.Now().Unix(),
+	)
+	var ch Channel
+	if err := s.db.QueryRow(`SELECT id, type, position FROM channels WHERE type = 'dm' AND name = ?`, name).Scan(&ch.ID, &ch.Type, &ch.Position); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	ch.Name = peerName
+	c.JSON(http.StatusOK, ch)
+}
+
+func (s *Server) checkTextOrDM(c *gin.Context, channelID, userID int64) (string, string, bool) {
+	var chType, chName string
+	if err := s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, channelID).Scan(&chType, &chName); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "channel not found"})
+			return "", "", false
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return "", "", false
+	}
+	if chType == "dm" {
+		u1, u2, ok := parseDM(chName)
+		if !ok || (u1 != userID && u2 != userID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return "", "", false
+		}
+		return chType, chName, true
+	}
+	if chType != "text" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "not a text channel"})
+		return "", "", false
+	}
+	return chType, chName, true
 }
 
 func (s *Server) handleMessages(c *gin.Context) {
 	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	if _, _, ok := s.checkTextOrDM(c, channelID, user.ID); !ok {
 		return
 	}
 	rows, err := s.db.Query(
@@ -83,17 +187,8 @@ func (s *Server) handleSendMessage(c *gin.Context) {
 		return
 	}
 	user := c.MustGet("user").(User)
-	var channelType string
-	if err := s.db.QueryRow(`SELECT type FROM channels WHERE id = ?`, channelID).Scan(&channelType); err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "channel not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
-		return
-	}
-	if channelType != "text" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "not a text channel"})
+	chType, chName, ok := s.checkTextOrDM(c, channelID, user.ID)
+	if !ok {
 		return
 	}
 	now := time.Now().Unix()
@@ -107,7 +202,7 @@ func (s *Server) handleSendMessage(c *gin.Context) {
 	}
 	id, _ := res.LastInsertId()
 	msg := Message{ID: id, ChannelID: channelID, UserID: user.ID, Username: user.Username, Body: body, CreatedAt: now}
-	s.hub.broadcast(event{Type: "message", Message: &msg})
+	s.notifyChannel(chType, chName, event{Type: "message", Message: &msg})
 	c.JSON(http.StatusOK, msg)
 }
 
@@ -145,7 +240,9 @@ func (s *Server) handleEditMessage(c *gin.Context) {
 		return
 	}
 	m.Username = user.Username
-	s.hub.broadcast(event{Type: "message_edit", Message: &m})
+	var chType, chName string
+	s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, m.ChannelID).Scan(&chType, &chName)
+	s.notifyChannel(chType, chName, event{Type: "message_edit", Message: &m})
 	c.JSON(http.StatusOK, m)
 }
 
@@ -169,6 +266,8 @@ func (s *Server) handleDeleteMessage(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 		return
 	}
-	s.hub.broadcast(event{Type: "message_delete", Message: &m})
+	var chType, chName string
+	s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, m.ChannelID).Scan(&chType, &chName)
+	s.notifyChannel(chType, chName, event{Type: "message_delete", Message: &m})
 	c.Status(http.StatusNoContent)
 }

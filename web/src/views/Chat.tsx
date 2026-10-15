@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Hash, Menu, ScreenShare, Settings } from "lucide-react";
+import { AtSign, Hash, Menu, ScreenShare, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "../lib/api";
 import { usePresence } from "../lib/presence";
@@ -37,13 +37,23 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setOnline(new Set(ev.users ?? []));
         if (ev.roster) setUsers(ev.roster);
         setVoiceRooms(ev.voice ?? {});
-      } else if (ev.message && ev.message.channelId === selectedId.current) {
+      } else if (ev.message) {
         if (ev.type === "message") {
-          setMessages((prev) => [...prev, ev.message!]);
-        } else if (ev.type === "message_edit") {
-          setMessages((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
-        } else if (ev.type === "message_delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== ev.message!.id));
+          setChannels((cs) => {
+            if (!cs.some((c) => c.id === ev.message!.channelId)) {
+              api<Channel[]>("/channels").then(setChannels).catch(() => {});
+            }
+            return cs;
+          });
+        }
+        if (ev.message.channelId === selectedId.current) {
+          if (ev.type === "message") {
+            setMessages((prev) => [...prev, ev.message!]);
+          } else if (ev.type === "message_edit") {
+            setMessages((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
+          } else if (ev.type === "message_delete") {
+            setMessages((prev) => prev.filter((m) => m.id !== ev.message!.id));
+          }
         }
       }
     },
@@ -81,7 +91,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   }, []);
 
   useEffect(() => {
-    if (selected?.type !== "text") {
+    if (selected?.type !== "text" && selected?.type !== "dm") {
       setMessages([]);
       return;
     }
@@ -89,6 +99,16 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       .then(setMessages)
       .catch(() => {});
   }, [selected]);
+
+  async function selectUser(u: UserSummary) {
+    try {
+      const dm = await api<Channel>(`/dms/${u.id}`, { method: "POST" });
+      setChannels((cs) => (cs.some((c) => c.id === dm.id) ? cs : [...cs, dm]));
+      selectChannel(dm);
+    } catch {
+      // ignore
+    }
+  }
 
   function selectChannel(c: Channel) {
     setSelected(c);
@@ -126,6 +146,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           channels={channels}
           selected={selected}
           onSelect={selectChannel}
+          onSelectUser={selectUser}
           voice={voice}
           voiceRooms={voiceRooms}
           openShare={openShare}
@@ -163,7 +184,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
               </>
             ) : (
               <>
-                {selected && <Hash size={14} />}
+                {selected && (selected.type === "dm" ? <AtSign size={14} /> : <Hash size={14} />)}
                 {selected?.name}
               </>
             )}

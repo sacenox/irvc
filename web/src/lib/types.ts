@@ -11,7 +11,7 @@ export interface UserSummary {
 
 export interface Channel {
   id: number;
-  type: "text" | "voice";
+  type: "text" | "voice" | "dm";
   name: string;
   position: number;
 }

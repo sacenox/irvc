@@ -138,6 +138,23 @@ func (h *hub) broadcast(ev event) {
 	}
 }
 
+func (h *hub) sendTo(ev event, userIDs ...int64) {
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, uid := range userIDs {
+		for c := range h.clients[uid] {
+			select {
+			case c.send <- data:
+			default:
+			}
+		}
+	}
+}
+
 func (h *hub) roster() []userSummary {
 	rows, err := h.db.Query(`SELECT id, username FROM users ORDER BY username`)
 	if err != nil {

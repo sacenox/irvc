@@ -412,7 +412,7 @@ export default function ChatPane({
         <textarea
           ref={textareaRef}
           rows={1}
-          placeholder={`message #${channel.name}`}
+          placeholder={`message ${channel.type === "dm" ? "@" : "#"}${channel.name}`}
           value={body}
           onChange={(e) => {
             setBody(e.target.value);
