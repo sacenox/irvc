@@ -15,6 +15,7 @@ export interface Channel {
   name: string;
   position: number;
   permanent: boolean;
+  unread?: number;
 }
 
 export type Reaction = "+1" | "-1" | "heart" | "laugh";

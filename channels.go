@@ -55,7 +55,15 @@ func (s *Server) handleChannels(c *gin.Context) {
 	for _, u := range s.hub.roster() {
 		users[u.ID] = u.Username
 	}
-	rows, err := s.db.Query(`SELECT id, type, name, position, permanent FROM channels ORDER BY position, id`)
+	rows, err := s.db.Query(
+		`SELECT c.id, c.type, c.name, c.position, c.permanent,
+		        (SELECT COUNT(*) FROM messages m
+		         WHERE m.channel_id = c.id AND m.user_id != ?
+		           AND m.id > COALESCE((SELECT r.last_read_message_id FROM read_state r
+		                                WHERE r.user_id = ? AND r.channel_id = c.id), 0))
+		 FROM channels c ORDER BY c.position, c.id`,
+		user.ID, user.ID,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 		return
@@ -64,7 +72,7 @@ func (s *Server) handleChannels(c *gin.Context) {
 	channels := []Channel{}
 	for rows.Next() {
 		var ch Channel
-		if err := rows.Scan(&ch.ID, &ch.Type, &ch.Name, &ch.Position, &ch.Permanent); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Type, &ch.Name, &ch.Position, &ch.Permanent, &ch.Unread); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 			return
 		}
@@ -85,6 +93,39 @@ func (s *Server) handleChannels(c *gin.Context) {
 		channels = append(channels, ch)
 	}
 	c.JSON(http.StatusOK, channels)
+}
+
+// handleMarkRead advances the caller's read cursor for a channel to the latest
+// message, clearing its unread count for every device they use.
+func (s *Server) handleMarkRead(c *gin.Context) {
+	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	if _, _, ok := s.checkTextOrDM(c, channelID, user.ID); !ok {
+		return
+	}
+	var lastID int64
+	if err := s.db.QueryRow(
+		`SELECT COALESCE(MAX(id), 0) FROM messages WHERE channel_id = ?`, channelID,
+	).Scan(&lastID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	if _, err := s.db.Exec(
+		`INSERT INTO read_state (user_id, channel_id, last_read_message_id, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(user_id, channel_id) DO UPDATE SET
+		   last_read_message_id = MAX(last_read_message_id, excluded.last_read_message_id),
+		   updated_at = excluded.updated_at`,
+		user.ID, channelID, lastID, time.Now().Unix(),
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 type createChannelRequest struct {

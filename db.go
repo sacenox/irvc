@@ -21,6 +21,7 @@ type Channel struct {
 	Name      string `json:"name"`
 	Position  int    `json:"position"`
 	Permanent bool   `json:"permanent"`
+	Unread    int    `json:"unread"`
 }
 
 type Message struct {
@@ -87,6 +88,13 @@ CREATE TABLE IF NOT EXISTS reactions (
 	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	reaction   TEXT NOT NULL,
 	PRIMARY KEY (message_id, user_id, reaction)
+);
+CREATE TABLE IF NOT EXISTS read_state (
+	user_id              INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	channel_id           INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	last_read_message_id INTEGER NOT NULL DEFAULT 0,
+	updated_at           INTEGER NOT NULL,
+	PRIMARY KEY (user_id, channel_id)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_dm ON channels(name) WHERE type = 'dm';

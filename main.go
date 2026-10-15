@@ -137,6 +137,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.POST("/dms/:userId", s.handleOpenDM)
 	authed.GET("/channels/:id/messages", s.handleMessages)
 	authed.POST("/channels/:id/messages", s.handleSendMessage)
+	authed.POST("/channels/:id/read", s.handleMarkRead)
 	authed.PATCH("/messages/:id", s.handleEditMessage)
 	authed.DELETE("/messages/:id", s.handleDeleteMessage)
 	authed.POST("/messages/:id/reactions", s.handleToggleReaction)

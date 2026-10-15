@@ -60,6 +60,8 @@ invites  (token, created_by, expires_at, used_by, used_at)
 sessions (id, user_id, expires_at)
 channels (id, type, name, position, created_at)   -- type: text | voice | dm
 messages (id, channel_id, user_id, body, created_at, edited_at)
+reactions (message_id, user_id, reaction)
+read_state (user_id, channel_id, last_read_message_id, updated_at)
 ```
 
 - Messages are returned joined with their author's username.
@@ -72,6 +74,7 @@ messages (id, channel_id, user_id, body, created_at, edited_at)
 - **Channels:** seeded (`#general` text, `general` voice) plus on-demand 1-on-1 DMs opened by clicking a user. Ordered by `position`. Public channel CRUD is out of scope.
 - **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
 - **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
+- **Unread:** `read_state` stores each user's last-read message per channel; `/channels` returns the count of newer messages by others. Opening a channel marks it read, so the count survives reload and is shared across devices.
 - **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel; `/gif [query]` opens a picker with the top Giphy results (trending when no query) to insert one.
 - **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide. Gifs from Giphy can also be inserted with the gif picker.
 - **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.

@@ -30,6 +30,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
+  const [unread, setUnread] = useState<Record<number, number>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openShare, setOpenShare] = useState<string | null>(null);
   const desktop = useRef(window.matchMedia("(min-width: 768px)").matches);
@@ -61,6 +62,11 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             }
             return cs;
           });
+          if (ev.message.channelId === selectedId.current) {
+            markRead(ev.message.channelId);
+          } else if (ev.message.username !== user.username) {
+            setUnread((u) => ({ ...u, [ev.message!.channelId]: (u[ev.message!.channelId] ?? 0) + 1 }));
+          }
         }
         if (ev.message.channelId === selectedId.current) {
           if (ev.type === "message") {
@@ -108,6 +114,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     api<Channel[]>("/channels")
       .then((cs) => {
         setChannels(cs);
+        setUnread(
+          Object.fromEntries(cs.filter((c) => c.unread).map((c) => [c.id, c.unread as number])),
+        );
         setSelected(cs.find((c) => c.type === "text") ?? cs[0] ?? null);
       })
       .catch(() => {});
@@ -125,6 +134,27 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       .then(setMessages)
       .catch(() => {});
   }, [selected]);
+
+  // Opening a channel clears its unread badge and tells the server, so the
+  // count stays right on the next cold start and on the user's other devices.
+  useEffect(() => {
+    if (selected && (selected.type === "text" || selected.type === "dm")) markRead(selected.id);
+  }, [selected]);
+
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
+  useEffect(() => {
+    document.title = totalUnread > 0 ? `(${totalUnread}) irvc` : "irvc";
+  }, [totalUnread]);
+
+  function markRead(id: number) {
+    setUnread((u) => {
+      if (!u[id]) return u;
+      const next = { ...u };
+      delete next[id];
+      return next;
+    });
+    api(`/channels/${id}/read`, { method: "POST" }).catch(() => {});
+  }
 
   async function selectUser(u: UserSummary) {
     try {
@@ -178,6 +208,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       {sidebarOpen && (
         <Sidebar
           channels={channels.filter((c) => c.type !== "dm" || !hiddenDms.includes(c.id))}
+          unread={unread}
           selected={selected}
           onSelect={selectChannel}
           onCloseDM={closeDM}

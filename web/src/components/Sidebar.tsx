@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "cn";
 import { api } from "../lib/api";
 import type { Channel, UserSummary } from "../lib/types";
 import type { Mode } from "../lib/theme";
@@ -41,6 +42,7 @@ const byName = (a: Channel, b: Channel) => a.name.localeCompare(b.name);
 
 export default function Sidebar({
   channels,
+  unread,
   selected,
   onSelect,
   onCloseDM,
@@ -59,6 +61,7 @@ export default function Sidebar({
   onLogout,
 }: {
   channels: Channel[];
+  unread: Record<number, number>;
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   onCloseDM: (c: Channel) => void;
@@ -120,6 +123,7 @@ export default function Sidebar({
         <Group
           label="Text"
           channels={texts}
+          unread={unread}
           selected={selected}
           onSelect={onSelect}
           onDelete={deleteChannel}
@@ -177,6 +181,7 @@ export default function Sidebar({
           <Group
             label="DMs"
             channels={dms}
+            unread={unread}
             selected={selected}
             onSelect={onSelect}
             onClose={onCloseDM}
@@ -234,6 +239,7 @@ export default function Sidebar({
 function Group({
   label,
   channels,
+  unread,
   selected,
   onSelect,
   onClose,
@@ -243,6 +249,7 @@ function Group({
 }: {
   label: string;
   channels: Channel[];
+  unread: Record<number, number>;
   selected: Channel | null;
   onSelect: (c: Channel) => void;
   onClose?: (c: Channel) => void;
@@ -265,40 +272,51 @@ function Group({
           </Button>
         )}
       </div>
-      {channels.map((c) => (
-        <div key={c.id} className="group/dm relative">
-          <Button
-            variant={selected?.id === c.id ? "secondary" : "ghost"}
-            onClick={() => onSelect(c)}
-            className="w-full justify-start gap-2 pr-7 font-normal"
-          >
-            {icon}
-            {c.name}
-          </Button>
-          {onClose && (
+      {channels.map((c) => {
+        const count = unread[c.id] ?? 0;
+        return (
+          <div key={c.id} className="group/dm relative">
             <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => onClose(c)}
-              title="close dm"
-              className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
+              variant={selected?.id === c.id ? "secondary" : "ghost"}
+              onClick={() => onSelect(c)}
+              className={cn(
+                "w-full justify-start gap-2 pr-7 font-normal",
+                count > 0 && "font-semibold text-gold",
+              )}
             >
-              <X />
+              {icon}
+              <span className="flex-1 truncate text-left">{c.name}</span>
+              {count > 0 && (
+                <span className="shrink-0 rounded-full bg-gold px-1.5 text-xs leading-5 text-bg">
+                  {count}
+                </span>
+              )}
             </Button>
-          )}
-          {onDelete && !c.permanent && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => onDelete(c)}
-              title="delete channel"
-              className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
-            >
-              <Trash2 />
-            </Button>
-          )}
-        </div>
-      ))}
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => onClose(c)}
+                title="close dm"
+                className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
+              >
+                <X />
+              </Button>
+            )}
+            {onDelete && !c.permanent && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => onDelete(c)}
+                title="delete channel"
+                className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
