@@ -345,11 +345,21 @@ export default function ChatPane({
     <>
       <div ref={listRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <div ref={contentRef}>
-          {messages.map((m) => {
+          {messages.map((m, i) => {
             const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
             const hit = !action && isMentioned(m.body, username);
             const own = m.username === username;
             const editing = editingId === m.id;
+            const prev = messages[i - 1];
+            // group successive messages by the same author within 5 minutes.
+            const grouped =
+              !action &&
+              !editing &&
+              !m.editedAt &&
+              prev !== undefined &&
+              !prev.body.startsWith("/me ") &&
+              prev.username === m.username &&
+              m.createdAt - prev.createdAt < 300;
             return (
               <div
                 key={m.id}
@@ -368,13 +378,15 @@ export default function ChatPane({
                   </div>
                 ) : (
                   <>
-                    <div className="text-sepia/40">
-                      {clock(m.createdAt)}
-                      {!action && <span className="text-gold/90"> {m.username}</span>}
-                      {m.editedAt ? (
-                        <span className="ml-1 text-xs text-sepia/40">(edited)</span>
-                      ) : null}
-                    </div>
+                    {!grouped && (
+                      <div className="text-sepia/40">
+                        {clock(m.createdAt)}
+                        {!action && <span className="text-gold/90"> {m.username}</span>}
+                        {m.editedAt ? (
+                          <span className="ml-1 text-xs text-sepia/40">(edited)</span>
+                        ) : null}
+                      </div>
+                    )}
                     {editing ? (
                       <textarea
                         autoFocus
