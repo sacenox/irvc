@@ -8,12 +8,28 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Paperclip, Pencil, SendHorizontal, Trash2 } from "lucide-react";
+import {
+  Heart,
+  Laugh,
+  Paperclip,
+  Pencil,
+  SendHorizontal,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { api, upload } from "../lib/api";
-import type { Channel, Message, UserSummary } from "../lib/types";
+import type { Channel, Message, Reaction, UserSummary } from "../lib/types";
 import Markdown from "./Markdown";
+
+const reactions: { key: Reaction; label: string; Icon: typeof ThumbsUp }[] = [
+  { key: "+1", label: "+1", Icon: ThumbsUp },
+  { key: "-1", label: "-1", Icon: ThumbsDown },
+  { key: "heart", label: "like", Icon: Heart },
+  { key: "laugh", label: "laugh", Icon: Laugh },
+];
 
 const maxInputHeight = 200;
 const maxSuggestions = 8;
@@ -219,6 +235,13 @@ export default function ChatPane({
     await api(`/messages/${id}`, { method: "DELETE" }).catch(() => {});
   }
 
+  async function toggleReaction(id: number, reaction: Reaction) {
+    await api(`/messages/${id}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
+    }).catch(() => {});
+  }
+
   async function send() {
     const text = body.trim();
     if (!text || !channel) return;
@@ -323,43 +346,91 @@ export default function ChatPane({
                     }}
                     className="max-h-[200px] min-w-0 flex-1 resize-none rounded border border-input bg-transparent px-2 py-0.5 text-sm leading-6 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
                   />
-                ) : action ? (
-                  <div className="min-w-0 flex-1 break-words italic text-gold/90">
-                    * {m.username} {action}
-                    {m.editedAt ? (
-                      <span className="ml-1 not-italic text-xs text-sepia/40">(edited)</span>
-                    ) : null}
-                  </div>
                 ) : (
-                  <div className={bodyClass}>
-                    <Markdown
-                      text={m.body}
-                      collapsed={collapsed.has(m.id)}
-                      onToggle={() => toggleImage(m.id)}
-                    />
-                    {m.editedAt ? <span className="text-xs text-sepia/40">(edited)</span> : null}
+                  <div className="min-w-0 flex-1">
+                    {action ? (
+                      <div className="break-words italic text-gold/90">
+                        * {m.username} {action}
+                        {m.editedAt ? (
+                          <span className="ml-1 not-italic text-xs text-sepia/40">(edited)</span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className={bodyClass}>
+                        <Markdown
+                          text={m.body}
+                          collapsed={collapsed.has(m.id)}
+                          onToggle={() => toggleImage(m.id)}
+                        />
+                        {m.editedAt ? (
+                          <span className="text-xs text-sepia/40">(edited)</span>
+                        ) : null}
+                      </div>
+                    )}
+                    {m.reactions && Object.keys(m.reactions).length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap gap-1 pb-0.5">
+                        {reactions.map(({ key, Icon }) => {
+                          const list = m.reactions?.[key];
+                          if (!list?.length) return null;
+                          const active = list.includes(username);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              title={list.join(", ")}
+                              onClick={() => toggleReaction(m.id, key)}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs leading-none transition-colors",
+                                active
+                                  ? "border-gold/50 bg-gold/15 text-gold"
+                                  : "border-sepia/20 bg-sepia/5 text-sepia/70 hover:border-sepia/40",
+                              )}
+                            >
+                              <Icon className="size-3" />
+                              {list.length}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
-                {own && !editing && (
+                {!editing && (
                   <div className="invisible flex shrink-0 items-center gap-0.5 group-hover:visible">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      title="edit message"
-                      onClick={() => startEdit(m)}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      title="delete message"
-                      onClick={() => remove(m.id)}
-                    >
-                      <Trash2 />
-                    </Button>
+                    {reactions.map(({ key, label, Icon }) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        title={label}
+                        onClick={() => toggleReaction(m.id, key)}
+                      >
+                        <Icon />
+                      </Button>
+                    ))}
+                    {own && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          title="edit message"
+                          onClick={() => startEdit(m)}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          title="delete message"
+                          onClick={() => remove(m.id)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

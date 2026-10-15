@@ -16,6 +16,8 @@ export interface Channel {
   position: number;
 }
 
+export type Reaction = "+1" | "-1" | "heart" | "laugh";
+
 export interface Message {
   id: number;
   channelId: number;
@@ -24,6 +26,7 @@ export interface Message {
   body: string;
   createdAt: number;
   editedAt?: number;
+  reactions?: Partial<Record<Reaction, string[]>>;
 }
 
 export interface WSEvent {

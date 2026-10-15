@@ -23,13 +23,14 @@ type Channel struct {
 }
 
 type Message struct {
-	ID        int64  `json:"id"`
-	ChannelID int64  `json:"channelId"`
-	UserID    int64  `json:"userId"`
-	Username  string `json:"username"`
-	Body      string `json:"body"`
-	CreatedAt int64  `json:"createdAt"`
-	EditedAt  int64  `json:"editedAt,omitempty"`
+	ID        int64               `json:"id"`
+	ChannelID int64               `json:"channelId"`
+	UserID    int64               `json:"userId"`
+	Username  string              `json:"username"`
+	Body      string              `json:"body"`
+	CreatedAt int64               `json:"createdAt"`
+	EditedAt  int64               `json:"editedAt,omitempty"`
+	Reactions map[string][]string `json:"reactions,omitempty"`
 }
 
 func OpenDB(path string) *sql.DB {
@@ -78,6 +79,12 @@ CREATE TABLE IF NOT EXISTS messages (
 	body       TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
 	edited_at  INTEGER
+);
+CREATE TABLE IF NOT EXISTS reactions (
+	message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	reaction   TEXT NOT NULL,
+	PRIMARY KEY (message_id, user_id, reaction)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_dm ON channels(name) WHERE type = 'dm';

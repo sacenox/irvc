@@ -163,7 +163,57 @@ func (s *Server) handleMessages(c *gin.Context) {
 	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 		messages[i], messages[j] = messages[j], messages[i]
 	}
+	if len(messages) > 0 {
+		byID := make(map[int64]*Message, len(messages))
+		for i := range messages {
+			byID[messages[i].ID] = &messages[i]
+		}
+		rRows, err := s.db.Query(
+			`SELECT r.message_id, r.reaction, u.username
+			 FROM reactions r JOIN users u ON u.id = r.user_id
+			 WHERE r.message_id >= ? AND r.message_id <= ?
+			 ORDER BY r.rowid`,
+			messages[0].ID, messages[len(messages)-1].ID,
+		)
+		if err == nil {
+			defer rRows.Close()
+			for rRows.Next() {
+				var mid int64
+				var react, uname string
+				if rRows.Scan(&mid, &react, &uname) == nil {
+					if m := byID[mid]; m != nil {
+						if m.Reactions == nil {
+							m.Reactions = map[string][]string{}
+						}
+						m.Reactions[react] = append(m.Reactions[react], uname)
+					}
+				}
+			}
+		}
+	}
 	c.JSON(http.StatusOK, messages)
+}
+
+func (s *Server) messageReactions(msgID int64) map[string][]string {
+	rows, err := s.db.Query(
+		`SELECT r.reaction, u.username FROM reactions r JOIN users u ON u.id = r.user_id WHERE r.message_id = ? ORDER BY r.rowid`,
+		msgID,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out map[string][]string
+	for rows.Next() {
+		var react, uname string
+		if rows.Scan(&react, &uname) == nil {
+			if out == nil {
+				out = map[string][]string{}
+			}
+			out[react] = append(out[react], uname)
+		}
+	}
+	return out
 }
 
 type sendMessageRequest struct {
@@ -240,8 +290,72 @@ func (s *Server) handleEditMessage(c *gin.Context) {
 		return
 	}
 	m.Username = user.Username
+	m.Reactions = s.messageReactions(m.ID)
 	var chType, chName string
 	s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, m.ChannelID).Scan(&chType, &chName)
+	s.notifyChannel(chType, chName, event{Type: "message_edit", Message: &m})
+	c.JSON(http.StatusOK, m)
+}
+
+var validReactions = map[string]bool{
+	"+1":    true,
+	"-1":    true,
+	"heart": true,
+	"laugh": true,
+}
+
+type reactionRequest struct {
+	Reaction string `json:"reaction"`
+}
+
+func (s *Server) handleToggleReaction(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad message"})
+		return
+	}
+	var req reactionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || !validReactions[req.Reaction] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid reaction"})
+		return
+	}
+	var m Message
+	err = s.db.QueryRow(
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0)
+		 FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?`,
+		msgID,
+	).Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	chType, chName, ok := s.checkTextOrDM(c, m.ChannelID, user.ID)
+	if !ok {
+		return
+	}
+	res, err := s.db.Exec(
+		`DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND reaction = ?`,
+		msgID, user.ID, req.Reaction,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		if _, err := s.db.Exec(
+			`INSERT INTO reactions (message_id, user_id, reaction) VALUES (?, ?, ?)`,
+			msgID, user.ID, req.Reaction,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+			return
+		}
+	}
+	m.Reactions = s.messageReactions(m.ID)
 	s.notifyChannel(chType, chName, event{Type: "message_edit", Message: &m})
 	c.JSON(http.StatusOK, m)
 }
