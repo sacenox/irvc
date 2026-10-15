@@ -13,6 +13,7 @@ services:
       IRVC_LIVEKIT_URL: ${IRVC_LIVEKIT_URL:-ws://localhost:7880}
       IRVC_LIVEKIT_API_KEY: irvc
       IRVC_LIVEKIT_SECRET: ${IRVC_LIVEKIT_SECRET:-irvc-dev-livekit-secret-000000000000}
+      IRVC_GIPHY_API_KEY: ${IRVC_GIPHY_API_KEY:-}
     volumes:
       - irvc-data:/data
     depends_on:

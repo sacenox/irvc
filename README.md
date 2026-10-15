@@ -60,6 +60,7 @@ Secrets come from the shell env:
 | `IRVC_LIVEKIT_SECRET` | — | must match livekit-server |
 | `IRVC_MEDIA_DIR` | `media` | uploaded image storage, the only other state |
 | `IRVC_MAX_UPLOAD` | `8388608` | max image upload bytes |
+| `IRVC_GIPHY_API_KEY` | — | Giphy API key; `/gif` and the gif picker are disabled without it |
 
 Voice is disabled if the LiveKit vars are unset.
 

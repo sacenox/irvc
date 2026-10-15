@@ -30,6 +30,11 @@ export interface Message {
   reactions?: Partial<Record<Reaction, string[]>>;
 }
 
+export interface Gif {
+  url: string;
+  preview: string;
+}
+
 export interface WSEvent {
   type:
     | "message"

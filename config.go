@@ -14,6 +14,7 @@ type Config struct {
 	LiveKitSecret string
 	MediaDir      string
 	MaxUpload     int64
+	GiphyKey      string
 }
 
 func LoadConfig() *Config {
@@ -26,6 +27,7 @@ func LoadConfig() *Config {
 		LiveKitSecret: env("IRVC_LIVEKIT_SECRET", ""),
 		MediaDir:      env("IRVC_MEDIA_DIR", "media"),
 		MaxUpload:     envInt("IRVC_MAX_UPLOAD", 8<<20),
+		GiphyKey:      os.Getenv("IRVC_GIPHY_API_KEY"),
 	}
 }
 

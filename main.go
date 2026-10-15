@@ -142,6 +142,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.POST("/messages/:id/reactions", s.handleToggleReaction)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
 	authed.POST("/invites", s.handleCreateInvite)
+	authed.GET("/gifs", s.handleGifs)
 	authed.POST("/upload", s.handleUpload)
 	authed.GET("/media/:name", s.handleMedia)
 	authed.GET("/ws", s.handleWS)

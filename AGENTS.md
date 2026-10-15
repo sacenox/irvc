@@ -21,3 +21,8 @@ This is ours.
 -d --build`, then <http://localhost:8080>. The container serves the built
 frontend; run `npm run dev` in `web/` for HMR. Details in
 `deploy/dev/README.md`. The bare-metal path in `DEPLOY.md` is unaffected.
+
+`podman-compose up -d --build` does not recreate the container when only the
+built image changes, so it can keep serving a stale frontend. After changing
+code, recreate with `podman-compose up -d --force-recreate` (and rebuild the
+image with `podman-compose build --no-cache` if the build itself is cached).

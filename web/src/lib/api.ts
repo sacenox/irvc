@@ -12,6 +12,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function gifs(query: string): Promise<{ url: string; preview: string }[]> {
+  const { gifs } = await api<{ gifs: { url: string; preview: string }[] }>(
+    `/gifs?q=${encodeURIComponent(query)}`,
+  );
+  return gifs;
+}
+
 export async function upload(file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append("file", file);

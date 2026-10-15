@@ -72,8 +72,8 @@ messages (id, channel_id, user_id, body, created_at, edited_at)
 - **Channels:** seeded (`#general` text, `general` voice) plus on-demand 1-on-1 DMs opened by clicking a user. Ordered by `position`. Public channel CRUD is out of scope.
 - **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
 - **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
-- **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel.
-- **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide.
+- **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel; `/gif [query]` opens a picker with the top Giphy results (trending when no query) to insert one.
+- **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide. Gifs from Giphy can also be inserted with the gif picker.
 - **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.
 - **Screen share:** any participant may publish a screen share (with tab or system audio) into the room. It is not persisted and not recorded. Shares are visible only to participants, not to the rest of the server. Share audio plays through the normal audio path, so deafen and per-peer volume apply.
 - **Voice controls:** mute, deafen (local only), per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone, start/stop screen share.

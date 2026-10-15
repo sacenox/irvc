@@ -14,14 +14,16 @@ import {
   Paperclip,
   Pencil,
   SendHorizontal,
+  Sticker,
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import { api, upload } from "../lib/api";
-import type { Channel, Message, Reaction, UserSummary } from "../lib/types";
+import { api, gifs, upload } from "../lib/api";
+import type { Channel, Gif, Message, Reaction, UserSummary } from "../lib/types";
 import Markdown from "./Markdown";
 
 const reactions: { key: Reaction; label: string; Icon: typeof ThumbsUp }[] = [
@@ -71,6 +73,7 @@ export default function ChatPane({
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
     null,
   );
+  const [picker, setPicker] = useState<{ gifs: Gif[]; query: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -216,6 +219,26 @@ export default function ChatPane({
     setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)));
   }
 
+  async function openGifs(query: string) {
+    try {
+      const results = await gifs(query);
+      setPicker({ gifs: results, query });
+    } catch {
+      // ignore fetch failures
+    }
+  }
+
+  function pickGif(g: Gif) {
+    insert(`![gif](${g.url})\n`);
+    setPicker(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
+
   function startEdit(m: Message) {
     setEditingId(m.id);
     setEditBody(m.body);
@@ -251,6 +274,11 @@ export default function ChatPane({
       collapseAll();
       return;
     }
+    const gifCommand = /^\/gif(?:\s+(.*))?$/.exec(text);
+    if (gifCommand) {
+      openGifs(gifCommand[1]?.trim() ?? "");
+      return;
+    }
     try {
       await api(`/channels/${channel.id}/messages`, {
         method: "POST",
@@ -267,6 +295,11 @@ export default function ChatPane({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Escape" && picker) {
+      e.preventDefault();
+      setPicker(null);
+      return;
+    }
     const matches = mention ? suggest(mention.query) : [];
     if (mention && matches.length > 0) {
       if (e.key === "ArrowDown") {
@@ -443,6 +476,58 @@ export default function ChatPane({
         onSubmit={submit}
         className="relative flex items-end gap-2 border-t border-sepia/15 p-3"
       >
+        {picker && (
+          <div className="absolute bottom-full left-2 mb-1 w-[min(24rem,90vw)] rounded-lg border border-border bg-panel p-2 shadow-lg">
+            <div className="mb-1 flex items-center gap-1">
+              <input
+                autoFocus
+                value={picker.query}
+                onChange={(e) => setPicker({ ...picker, query: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    openGifs(picker.query.trim());
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setPicker(null);
+                  }
+                }}
+                placeholder="search gifs"
+                className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                title="cancel"
+                onClick={() => setPicker(null)}
+              >
+                <X />
+              </Button>
+            </div>
+            {picker.gifs.length === 0 ? (
+              <div className="px-1 py-2 text-sm text-sepia/50">no results</div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1">
+                {picker.gifs.map((g) => (
+                  <button
+                    key={g.url}
+                    type="button"
+                    onClick={() => pickGif(g)}
+                    className="overflow-hidden rounded border border-sepia/15 hover:border-gold/50"
+                  >
+                    <img
+                      src={g.preview}
+                      alt=""
+                      loading="lazy"
+                      className="h-24 w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {mention && suggest(mention.query).length > 0 && (
           <div className="absolute bottom-full left-2 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-panel shadow-lg">
             {suggest(mention.query).map((u, i) => (
@@ -480,6 +565,9 @@ export default function ChatPane({
           onClick={() => fileRef.current?.click()}
         >
           <Paperclip />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" title="gif" onClick={() => openGifs("")}>
+          <Sticker />
         </Button>
         <textarea
           ref={textareaRef}
