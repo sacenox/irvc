@@ -36,6 +36,7 @@ const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
 // controls never depend on the sidebar being open.
 export default function VoiceBar({
   voice,
+  self,
   deafened,
   onDeafen,
   openShare,
@@ -44,6 +45,7 @@ export default function VoiceBar({
   className,
 }: {
   voice: Voice;
+  self: string;
   deafened: boolean;
   onDeafen: (value: boolean) => void;
   openShare?: string | null;
@@ -99,8 +101,15 @@ export default function VoiceBar({
         <span className="max-w-1/2 shrink-0 truncate text-xs text-faint">{status}</span>
       </div>
 
-      {voice.status === "live" && (peers.length > 0 || shares.length > 0) && (
+      {voice.status === "live" && (
         <ul className="mt-1 space-y-0.5">
+          <li className="row py-1 text-sm">
+            <Dot on={speaking.includes(self)} />
+            <span className="flex-1 truncate" style={{ color: userColor(self) }}>
+              {self}
+            </span>
+            <VoiceMarks muted={voice.muted} deafened={deafened} />
+          </li>
           {peers.map((p) => {
             const them = occupants?.find((o) => o.name === p);
             return (

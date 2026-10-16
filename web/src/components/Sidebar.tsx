@@ -116,6 +116,7 @@ export default function Sidebar({
               channel={c}
               voice={voice}
               occupants={voiceRooms[String(c.id)] ?? []}
+              self={username}
               deafened={deafened}
               onDeafen={onDeafen}
               openShare={openShare}
@@ -162,6 +163,7 @@ export default function Sidebar({
         {voice.channel?.type === "dm" && (
           <VoiceBar
             voice={voice}
+            self={username}
             deafened={deafened}
             onDeafen={onDeafen}
             openShare={openShare}
@@ -268,6 +270,7 @@ function VoiceRow({
   channel,
   voice,
   occupants,
+  self,
   deafened,
   onDeafen,
   openShare,
@@ -277,6 +280,7 @@ function VoiceRow({
   channel: Channel;
   voice: Voice;
   occupants: VoiceOccupant[];
+  self: string;
   deafened: boolean;
   onDeafen: (value: boolean) => void;
   openShare?: string | null;
@@ -289,6 +293,7 @@ function VoiceRow({
     return (
       <VoiceBar
         voice={voice}
+        self={self}
         deafened={deafened}
         onDeafen={onDeafen}
         openShare={openShare}

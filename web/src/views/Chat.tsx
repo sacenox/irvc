@@ -539,6 +539,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           <div className="shrink-0 px-2 pb-2 md:hidden">
             <VoiceBar
               voice={voice}
+              self={user.username}
               deafened={settings.deafened}
               onDeafen={(v) => update({ deafened: v })}
               openShare={openShare}
