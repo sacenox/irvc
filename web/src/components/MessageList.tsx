@@ -52,10 +52,16 @@ export default function MessageList({
 }) {
   const list = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // The scrollTop we last set ourselves. Our scroll-to-bottom can queue a
+  // scroll event that is handled only after a lazy image grows the list, so
+  // the gap to the bottom reads large even though the reader never scrolled.
+  const pinnedTop = useRef<number | null>(null);
 
   const scrollDown = () => {
     const el = list.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    pinnedTop.current = el.scrollTop;
   };
 
   // Jump to the newest message on channel switch, whatever the old position.
@@ -81,7 +87,12 @@ export default function MessageList({
 
   function onScroll() {
     const el = list.current;
-    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48) stick.current = true;
+    // A scroll event still sitting where we pinned is ours, not a reader
+    // scrolling up, so leave stick alone.
+    else if (pinnedTop.current === null || Math.abs(el.scrollTop - pinnedTop.current) >= 1)
+      stick.current = false;
   }
 
   return (
