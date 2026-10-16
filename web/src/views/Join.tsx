@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, Centered, Spinner, TextInput } from "@/ui";
 import AuthShell from "../components/AuthShell";
 import { api } from "../lib/api";
 import type { User } from "../lib/types";
@@ -8,24 +7,27 @@ import type { User } from "../lib/types";
 export default function Join({ onJoin }: { onJoin: (u: User) => void }) {
   const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const [valid, setValid] = useState<boolean | null>(null);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ valid: boolean }>(`/invites/${token}`)
+    api(`/invites/${token}`)
       .then(() => setValid(true))
       .catch(() => setValid(false));
   }, [token]);
 
-  async function submit(e: FormEvent) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
     setError("");
     try {
       onJoin(
         await api<User>("/claim", {
           method: "POST",
-          body: JSON.stringify({ token, username, password }),
+          body: JSON.stringify({
+            token,
+            username: form.get("username"),
+            password: form.get("password"),
+          }),
         }),
       );
     } catch (err) {
@@ -35,33 +37,37 @@ export default function Join({ onJoin }: { onJoin: (u: User) => void }) {
 
   if (valid === null) {
     return (
-      <div className="grid h-full place-items-center text-sm text-sepia/40">checking invite…</div>
+      <div className="flex min-h-dvh">
+        <Centered>
+          <Spinner />
+        </Centered>
+      </div>
     );
   }
   if (!valid) {
     return (
-      <div className="grid h-full place-items-center text-sm text-sepia/60">
-        invalid or expired invite
+      <div className="flex min-h-dvh bg-bg">
+        <Centered>this invite is invalid or has expired</Centered>
       </div>
     );
   }
 
   return (
-    <AuthShell title="create your account" onSubmit={submit}>
-      <Input
+    <AuthShell subtitle="create your account" onSubmit={submit}>
+      <TextInput
+        name="username"
         placeholder="username"
         autoFocus
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
+        autoComplete="username"
       />
-      <Input
+      <TextInput
+        name="password"
         type="password"
-        placeholder="password (min 8)"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        placeholder="password (min 8 characters)"
+        autoComplete="new-password"
       />
-      {error && <p className="text-xs text-gold">{error}</p>}
-      <Button className="w-full" type="submit">
+      {error && <p className="px-1 text-xs text-danger">{error}</p>}
+      <Button variant="primary" size="lg" type="submit" className="w-full">
         join
       </Button>
     </AuthShell>

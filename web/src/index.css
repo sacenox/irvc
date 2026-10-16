@@ -1,249 +1,304 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-@plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:is(.dark *));
+/* ─────────────────────────────────────────────────────────────────────────
+   Semantic design tokens.
 
-@theme {
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--sepia);
-  font-family: var(--font-mono);
-  -webkit-font-smoothing: antialiased;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--sepia) 25%, transparent);
-  border-radius: 5px;
-}
+   Everything in the UI is expressed in terms of these roles, never raw
+   colors. Palettes (below) and per-user overrides both just set these
+   variables, so a component written once re-themes for free.
+   ───────────────────────────────────────────────────────────────────────── */
 
 @theme inline {
-  --font-heading: var(--font-sans);
   --font-sans: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+
   --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-sepia: var(--sepia);
-  --color-gold: var(--gold);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-fg: var(--fg);
   --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-scrim: var(--scrim);
 }
 
+/* ── palettes ──────────────────────────────────────────────────────────── */
+
+/* 80s nicotine: sepia paper, the default. */
 :root {
-  --bg: #f4ecdf;
-  --panel: #ebe1cf;
-  --sepia: #6b4e2e;
-  --gold: #a9791f;
-  --background: #f4ecdf;
-  --foreground: #6b4e2e;
-  --card: #ebe1cf;
-  --card-foreground: #6b4e2e;
-  --popover: #ebe1cf;
-  --popover-foreground: #6b4e2e;
-  --primary: #a9791f;
-  --primary-foreground: #f4ecdf;
-  --secondary: #e3d8c4;
-  --secondary-foreground: #6b4e2e;
-  --muted: #e3d8c4;
-  --muted-foreground: #8a6f4a;
-  --accent: #ddd0b8;
-  --accent-foreground: #5c4326;
-  --destructive: #c0503c;
-  --border: #d5c7ae;
-  --input: #d5c7ae;
-  --ring: #a9791f;
-  --chart-1: #a9791f;
-  --chart-2: #8a6f4a;
-  --chart-3: #6b4e2e;
-  --chart-4: #b8a582;
-  --chart-5: #ddd0b8;
-  --radius: 0.375rem;
-  --sidebar: #efe6d7;
-  --sidebar-foreground: #6b4e2e;
-  --sidebar-primary: #a9791f;
-  --sidebar-primary-foreground: #f4ecdf;
-  --sidebar-accent: #e3d8c4;
-  --sidebar-accent-foreground: #6b4e2e;
-  --sidebar-border: #d5c7ae;
-  --sidebar-ring: #a9791f;
+  --bg: #f6efe2;
+  --surface: #ece2cf;
+  --raised: #fdfaf3;
+  --fg: #4a3418;
+  --muted: #8a6f4a;
+  --faint: #b3a086;
+  --line: #ddceb4;
+  --accent: #a9791f;
+  --accent-fg: #fdfaf3;
+  --danger: #b4432f;
+  --scrim: rgb(20 12 4 / 0.5);
 }
 
 .dark {
-  --bg: #0a0806;
-  --panel: #120d09;
-  --sepia: #c39a63;
-  --gold: #ffcc55;
-  --background: #0a0806;
-  --foreground: #c39a63;
-  --card: #120d09;
-  --card-foreground: #c39a63;
-  --popover: #120d09;
-  --popover-foreground: #c39a63;
-  --primary: #ffcc55;
-  --primary-foreground: #0a0806;
-  --secondary: #1c140d;
-  --secondary-foreground: #c39a63;
-  --muted: #1c140d;
-  --muted-foreground: #8a6f4a;
-  --accent: #241a10;
-  --accent-foreground: #d8b384;
-  --destructive: #c0503c;
-  --border: #2a1f14;
-  --input: #2a1f14;
-  --ring: #ffcc55;
-  --chart-1: #ffcc55;
-  --chart-2: #c39a63;
-  --chart-3: #8a6f4a;
-  --chart-4: #4e3520;
-  --chart-5: #241a10;
-  --sidebar: #0e0a07;
-  --sidebar-foreground: #c39a63;
-  --sidebar-primary: #ffcc55;
-  --sidebar-primary-foreground: #0a0806;
-  --sidebar-accent: #1c140d;
-  --sidebar-accent-foreground: #c39a63;
-  --sidebar-border: #2a1f14;
-  --sidebar-ring: #ffcc55;
+  --bg: #0b0906;
+  --surface: #100c08;
+  --raised: #1a130c;
+  --fg: #d8b98f;
+  --muted: #9c7d57;
+  --faint: #6d583c;
+  --line: #2a2016;
+  --accent: #ffcc55;
+  --accent-fg: #171109;
+  --danger: #e0715a;
+  --scrim: rgb(0 0 0 / 0.6);
 }
 
-/* tuxedo: grayscale white-to-black, same scale as the default. */
-.theme-tuxedo {
+/* tuxedo: pure grayscale. */
+[data-preset="tuxedo"] {
   --bg: #ffffff;
-  --panel: #f2f2f2;
-  --sepia: #1a1a1a;
-  --gold: #4d4d4d;
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --card: #f2f2f2;
-  --card-foreground: #1a1a1a;
-  --popover: #f2f2f2;
-  --popover-foreground: #1a1a1a;
-  --primary: #4d4d4d;
-  --primary-foreground: #ffffff;
-  --secondary: #e6e6e6;
-  --secondary-foreground: #1a1a1a;
-  --muted: #e6e6e6;
-  --muted-foreground: #6b6b6b;
-  --accent: #d9d9d9;
-  --accent-foreground: #0d0d0d;
-  --destructive: #404040;
-  --border: #d9d9d9;
-  --input: #d9d9d9;
-  --ring: #4d4d4d;
-  --chart-1: #4d4d4d;
-  --chart-2: #737373;
-  --chart-3: #1a1a1a;
-  --chart-4: #b3b3b3;
-  --chart-5: #d9d9d9;
-  --sidebar: #f7f7f7;
-  --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #4d4d4d;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e6e6e6;
-  --sidebar-accent-foreground: #1a1a1a;
-  --sidebar-border: #d9d9d9;
-  --sidebar-ring: #4d4d4d;
+  --surface: #f1f1f1;
+  --raised: #ffffff;
+  --fg: #141414;
+  --muted: #666666;
+  --faint: #a0a0a0;
+  --line: #dcdcdc;
+  --accent: #333333;
+  --accent-fg: #ffffff;
+  --danger: #b3261e;
+  --scrim: rgb(0 0 0 / 0.4);
 }
 
-.dark.theme-tuxedo {
+.dark[data-preset="tuxedo"] {
   --bg: #000000;
-  --panel: #0d0d0d;
-  --sepia: #e6e6e6;
-  --gold: #bfbfbf;
-  --background: #000000;
-  --foreground: #e6e6e6;
-  --card: #0d0d0d;
-  --card-foreground: #e6e6e6;
-  --popover: #0d0d0d;
-  --popover-foreground: #e6e6e6;
-  --primary: #bfbfbf;
-  --primary-foreground: #000000;
-  --secondary: #1a1a1a;
-  --secondary-foreground: #e6e6e6;
-  --muted: #1a1a1a;
-  --muted-foreground: #808080;
-  --accent: #262626;
-  --accent-foreground: #cccccc;
-  --destructive: #8c8c8c;
-  --border: #262626;
-  --input: #262626;
-  --ring: #bfbfbf;
-  --chart-1: #bfbfbf;
-  --chart-2: #999999;
-  --chart-3: #737373;
-  --chart-4: #4d4d4d;
-  --chart-5: #262626;
-  --sidebar: #050505;
-  --sidebar-foreground: #e6e6e6;
-  --sidebar-primary: #bfbfbf;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #1a1a1a;
-  --sidebar-accent-foreground: #e6e6e6;
-  --sidebar-border: #262626;
-  --sidebar-ring: #bfbfbf;
+  --surface: #0b0b0b;
+  --raised: #161616;
+  --fg: #e8e8e8;
+  --muted: #9a9a9a;
+  --faint: #6b6b6b;
+  --line: #272727;
+  --accent: #d4d4d4;
+  --accent-fg: #0a0a0a;
+  --danger: #e07a6a;
+  --scrim: rgb(0 0 0 / 0.65);
 }
+
+/* ── base ──────────────────────────────────────────────────────────────── */
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  html {
+    height: 100%;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
   body {
-    @apply bg-background text-foreground;
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
   }
-  html {
-    @apply font-sans;
+  #root {
+    height: 100%;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  ::placeholder {
+    color: var(--faint);
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--fg) 22%, transparent);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ── components ──────────────────────────────────────────────────────────
+   The shared vocabulary. Feature code composes these classes (usually via
+   the wrappers in src/ui) instead of inventing its own Tailwind recipes.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* buttons */
+  .btn {
+    @apply inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap select-none transition-colors outline-none disabled:pointer-events-none disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply bg-accent text-accent-fg hover:brightness-110;
+  }
+  .btn-secondary {
+    @apply border-line bg-raised text-fg hover:bg-surface;
+  }
+  .btn-ghost {
+    @apply text-muted hover:bg-raised hover:text-fg;
+  }
+  .btn-danger {
+    @apply text-danger hover:bg-danger/10;
+  }
+  .btn-sm {
+    @apply h-8 px-2.5 text-xs;
+  }
+  .btn-md {
+    @apply h-9;
+  }
+  .btn-lg {
+    @apply h-11 px-4;
+  }
+  .icon-btn {
+    @apply w-9 px-0;
+  }
+  .icon-btn-sm {
+    @apply h-7 w-7 text-xs;
+  }
+  .icon-btn-md {
+    @apply h-9 w-9;
+  }
+  .icon-btn-lg {
+    @apply h-11 w-11;
+  }
+  .btn svg {
+    @apply size-4 shrink-0;
+  }
+
+  /* inputs */
+  .input {
+    @apply w-full rounded-md border border-line bg-raised px-3 text-sm text-fg outline-none transition-colors focus:border-accent;
+  }
+  .input-md {
+    @apply h-9;
+  }
+  .input-lg {
+    @apply h-11 text-base;
+  }
+
+  /* surfaces */
+  .menu {
+    @apply min-w-44 rounded-lg border border-line bg-raised p-1 shadow-xl;
+  }
+  .menu-item {
+    @apply flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-sm text-fg transition-colors hover:bg-surface;
+  }
+  .menu-item-danger {
+    @apply text-danger hover:bg-danger/10;
+  }
+  .divider {
+    @apply my-1 h-px bg-line;
+  }
+
+  /* sidebar rows */
+  .row {
+    @apply flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-raised hover:text-fg;
+  }
+  .row-active {
+    @apply bg-raised font-medium text-fg;
+  }
+  .row-unread {
+    @apply font-medium text-accent;
+  }
+
+  .badge {
+    @apply inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[0.7rem] leading-5 font-semibold text-accent-fg;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md border border-line px-1.5 py-1 text-xs leading-none text-muted transition-colors hover:border-accent/60;
+  }
+  .chip-active {
+    @apply border-accent/60 bg-accent/15 text-fg;
+  }
+  .section-label {
+    @apply px-2 text-[0.7rem] font-medium tracking-[0.14em] text-faint uppercase;
+  }
+
+  /* markdown */
+  .md {
+    @apply text-sm leading-6 break-words;
+  }
+  .md > :first-child {
+    margin-top: 0;
+  }
+  .md > :last-child {
+    margin-bottom: 0;
+  }
+  .md p {
+    margin: 0 0 0.5rem;
+  }
+  .md a {
+    @apply text-accent underline underline-offset-2;
+  }
+  .md strong {
+    @apply font-semibold text-fg;
+  }
+  .md em {
+    @apply text-fg;
+  }
+  .md del {
+    @apply text-faint;
+  }
+  .md ul,
+  .md ol {
+    margin: 0 0 0.5rem;
+    padding-left: 1.4rem;
+  }
+  .md ul {
+    list-style: disc;
+  }
+  .md ol {
+    list-style: decimal;
+  }
+  .md li {
+    margin: 0.1rem 0;
+  }
+  .md blockquote {
+    margin: 0.4rem 0;
+    border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    padding-left: 0.75rem;
+    color: var(--muted);
+  }
+  .md code {
+    @apply rounded border border-line bg-surface px-1 py-px text-[0.85em];
+  }
+  .md pre {
+    @apply my-2 overflow-x-auto rounded-md border border-line bg-surface p-3;
+  }
+  .md pre code {
+    @apply border-0 bg-transparent p-0;
+  }
+  .md hr {
+    @apply my-3 border-line;
+  }
+  .md table {
+    @apply my-2 border-collapse text-[0.9em];
+  }
+  .md th,
+  .md td {
+    @apply border border-line px-2 py-1 text-left;
+  }
+  .md img {
+    @apply my-1 max-h-80 max-w-full rounded-md border border-line;
+  }
+}
+
+@utility scroll-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

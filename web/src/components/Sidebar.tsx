@@ -1,42 +1,45 @@
 import { useState, type ReactNode } from "react";
 import {
   AtSign,
+  Check,
   ChevronDown,
   ChevronRight,
   Hash,
   LogOut,
-  Mic,
-  MicOff,
-  Moon,
-  PhoneOff,
+  MoreHorizontal,
   Plus,
-  ScreenShare,
-  ScreenShareOff,
-  Settings,
-  Sun,
-  Trash2,
+  Settings as SettingsIcon,
   UserPlus,
   Volume2,
-  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "cn";
+import { IconButton, Menu, MenuItem, Dot, VoiceMarks } from "@/ui";
 import { api } from "../lib/api";
-import type { Channel, UserSummary } from "../lib/types";
-import type { Mode } from "../lib/theme";
+import type { Channel, UserSummary, VoiceOccupant } from "../lib/types";
 import type { Voice } from "../lib/voice";
-import UserList from "./UserList";
-import VoicePeers from "./VoicePeers";
+import VoiceBar from "./VoiceBar";
 
-interface Invite {
-  token: string;
-  expiresAt: number;
+interface Props {
+  channels: Channel[];
+  unread: Record<number, number>;
+  selected: Channel | null;
+  users: UserSummary[];
+  online: Set<string>;
+  username: string;
+  voice: Voice;
+  voiceRooms: Record<string, VoiceOccupant[]>;
+  deafened: boolean;
+  onDeafen: (value: boolean) => void;
+  openShare: string | null;
+  onOpenShare: (id: string) => void;
+  onSelect: (c: Channel) => void;
+  onSelectUser: (u: UserSummary) => void;
+  onCloseDM: (c: Channel) => void;
+  onCreateChannel: (type: "text" | "voice", name: string) => Promise<void>;
+  onDeleteChannel: (c: Channel) => void;
+  onOpenSettings: () => void;
+  onLogout: () => void;
 }
-
-// getDisplayMedia is absent on non-secure origins and on mobile browsers. The
-// button still renders, disabled, so its absence is never a silent mystery.
-const canShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
 const byName = (a: Channel, b: Channel) => a.name.localeCompare(b.name);
 
@@ -44,192 +47,132 @@ export default function Sidebar({
   channels,
   unread,
   selected,
-  onSelect,
-  onCloseDM,
-  onSelectUser,
-  voice,
-  voiceRooms,
-  openShare,
-  onOpenShare,
-  username,
   users,
   online,
-  mode,
-  onToggleMode,
-  settingsOpen,
-  onToggleSettings,
+  username,
+  voice,
+  voiceRooms,
+  deafened,
+  onDeafen,
+  openShare,
+  onOpenShare,
+  onSelect,
+  onSelectUser,
+  onCloseDM,
+  onCreateChannel,
+  onDeleteChannel,
+  onOpenSettings,
   onLogout,
-}: {
-  channels: Channel[];
-  unread: Record<number, number>;
-  selected: Channel | null;
-  onSelect: (c: Channel) => void;
-  onCloseDM: (c: Channel) => void;
-  onSelectUser: (u: UserSummary) => void;
-  voice: Voice;
-  voiceRooms: Record<string, string[]>;
-  openShare: string | null;
-  onOpenShare: (id: string) => void;
-  username: string;
-  users: UserSummary[];
-  online: Set<string>;
-  mode: Mode;
-  onToggleMode: () => void;
-  settingsOpen: boolean;
-  onToggleSettings: () => void;
-  onLogout: () => void;
-}) {
-  const [label, setLabel] = useState("create invite");
-  const [showUsers, setShowUsers] = useState(true);
+}: Props) {
   const [creating, setCreating] = useState<"text" | "voice" | null>(null);
-  const [draft, setDraft] = useState("");
+  const [showUsers, setShowUsers] = useState(true);
 
   const texts = channels.filter((c) => c.type === "text").sort(byName);
   const voices = channels.filter((c) => c.type === "voice").sort(byName);
   const dms = channels.filter((c) => c.type === "dm").sort(byName);
 
-  async function createChannel(type: "text" | "voice") {
-    const name = draft.trim();
-    if (!name) return;
-    try {
-      await api("/channels", { method: "POST", body: JSON.stringify({ type, name }) });
-      setCreating(null);
-      setDraft("");
-    } catch {
-      return;
-    }
-  }
-
-  async function deleteChannel(c: Channel) {
-    if (c.type === "text" && !window.confirm(`Delete #${c.name}? This is irreversible.`)) return;
-    await api(`/channels/${c.id}`, { method: "DELETE" }).catch(() => {});
-  }
-
-  async function invite() {
-    try {
-      const { token } = await api<Invite>("/invites", { method: "POST" });
-      await navigator.clipboard.writeText(`${window.location.origin}/join?token=${token}`);
-      setLabel("copied!");
-    } catch {
-      setLabel("failed");
-    }
-    setTimeout(() => setLabel("create invite"), 1500);
-  }
-
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-sepia/15 bg-bg max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-20">
-      <div className="px-4 py-3 text-sm font-semibold text-gold">irvc</div>
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
-        <Group
-          label="Text"
-          channels={texts}
-          unread={unread}
-          selected={selected}
-          onSelect={onSelect}
-          onDelete={deleteChannel}
-          onCreate={() => {
-            setCreating("text");
-            setDraft("");
-          }}
-          icon={<Hash size={14} />}
-        />
-        {creating === "text" && (
-          <ChannelForm
-            value={draft}
-            onChange={setDraft}
-            onSubmit={() => createChannel("text")}
-            onCancel={() => setCreating(null)}
-          />
-        )}
-        <div>
-          <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-[10px] uppercase tracking-widest text-sepia/40">Voice</span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => {
-                setCreating("voice");
-                setDraft("");
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex h-12 shrink-0 items-center px-4 text-sm font-semibold tracking-wide text-accent">
+        irvc
+      </div>
+
+      <nav className="flex-1 space-y-5 overflow-y-auto px-2 pb-2">
+        <Group label="Text" onAdd={() => setCreating("text")}>
+          {texts.map((c) => (
+            <ChannelRow
+              key={c.id}
+              icon={<Hash size={14} />}
+              name={c.name}
+              badge={unread[c.id]}
+              active={selected?.id === c.id}
+              onSelect={() => onSelect(c)}
+              actions={(close) =>
+                !c.permanent && (
+                  <MenuItem onClick={() => (close(), onDeleteChannel(c))} danger>
+                    delete channel
+                  </MenuItem>
+                )
+              }
+            />
+          ))}
+          {creating === "text" && (
+            <NewChannel
+              onCancel={() => setCreating(null)}
+              onSubmit={async (name) => {
+                await onCreateChannel("text", name);
+                setCreating(null);
               }}
-              title="new voice channel"
-            >
-              <Plus />
-            </Button>
-          </div>
+            />
+          )}
+        </Group>
+
+        <Group label="Voice" onAdd={() => setCreating("voice")}>
           {voices.map((c) => (
-            <VoiceChannel
+            <VoiceRow
               key={c.id}
               channel={c}
               voice={voice}
               occupants={voiceRooms[String(c.id)] ?? []}
-              openShare={openShare}
-              onOpenShare={onOpenShare}
-              username={username}
-              onDelete={deleteChannel}
+              onDelete={() => onDeleteChannel(c)}
             />
           ))}
-        </div>
-        {creating === "voice" && (
-          <ChannelForm
-            value={draft}
-            onChange={setDraft}
-            onSubmit={() => createChannel("voice")}
-            onCancel={() => setCreating(null)}
-          />
-        )}
+          {creating === "voice" && (
+            <NewChannel
+              onCancel={() => setCreating(null)}
+              onSubmit={async (name) => {
+                await onCreateChannel("voice", name);
+                setCreating(null);
+              }}
+            />
+          )}
+        </Group>
+
         {dms.length > 0 && (
-          <Group
-            label="DMs"
-            channels={dms}
-            unread={unread}
-            selected={selected}
-            onSelect={onSelect}
-            onClose={onCloseDM}
-            icon={<AtSign size={14} />}
+          <Group label="Direct messages">
+            {dms.map((c) => (
+              <ChannelRow
+                key={c.id}
+                icon={<AtSign size={14} />}
+                name={c.name}
+                badge={unread[c.id]}
+                active={selected?.id === c.id}
+                onSelect={() => onSelect(c)}
+                actions={(close) => (
+                  <MenuItem onClick={() => (close(), onCloseDM(c))}>close</MenuItem>
+                )}
+              />
+            ))}
+          </Group>
+        )}
+
+        <Group label="People" toggle={{ open: showUsers, set: () => setShowUsers((v) => !v) }}>
+          {showUsers && <UserList users={users} online={online} onSelectUser={onSelectUser} />}
+        </Group>
+      </nav>
+
+      <div className="shrink-0 px-2 pb-2">
+        {voice.channel && (
+          <VoiceBar
+            voice={voice}
+            deafened={deafened}
+            onDeafen={onDeafen}
+            openShare={openShare}
+            onOpenShare={onOpenShare}
+            occupants={voiceRooms[String(voice.channel.id)] ?? []}
+            className="mb-2"
           />
         )}
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowUsers((v) => !v)}
-            className="flex w-full items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-widest text-sepia/40 hover:text-sepia/70"
-          >
-            {showUsers ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            Users
-          </button>
-          {showUsers && <UserList users={users} online={online} onSelectUser={onSelectUser} />}
-        </div>
-      </nav>
-      <div className="space-y-2 p-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-2 font-normal text-sepia/50"
-          onClick={invite}
-        >
-          <UserPlus size={14} />
-          {label}
-        </Button>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onToggleMode}
-            title={mode === "dark" ? "light mode" : "dark mode"}
-          >
-            {mode === "dark" ? <Sun /> : <Moon />}
-          </Button>
-          <Button
-            variant={settingsOpen ? "secondary" : "ghost"}
-            size="icon-sm"
-            onClick={onToggleSettings}
-            title="settings"
-          >
-            <Settings />
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onLogout} title="log out">
+        <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+          <Dot on />
+          <span className="min-w-0 flex-1 truncate text-sm">{username}</span>
+          <InviteButton />
+          <IconButton label="settings" size="sm" onClick={onOpenSettings}>
+            <SettingsIcon />
+          </IconButton>
+          <IconButton label="log out" size="sm" onClick={onLogout}>
             <LogOut />
-          </Button>
+          </IconButton>
         </div>
       </div>
     </aside>
@@ -238,221 +181,211 @@ export default function Sidebar({
 
 function Group({
   label,
-  channels,
-  unread,
-  selected,
-  onSelect,
-  onClose,
-  onDelete,
-  onCreate,
-  icon,
+  onAdd,
+  toggle,
+  children,
 }: {
   label: string;
-  channels: Channel[];
-  unread: Record<number, number>;
-  selected: Channel | null;
-  onSelect: (c: Channel) => void;
-  onClose?: (c: Channel) => void;
-  onDelete?: (c: Channel) => void;
-  onCreate?: () => void;
-  icon: ReactNode;
+  onAdd?: () => void;
+  toggle?: { open: boolean; set: () => void };
+  children: ReactNode;
 }) {
   return (
-    <div>
-      <div className="flex items-center justify-between px-2 py-1">
-        <span className="text-[10px] uppercase tracking-widest text-sepia/40">{label}</span>
-        {onCreate && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={onCreate}
-            title={`new ${label.toLowerCase()} channel`}
+    <div className="space-y-0.5">
+      <div className="flex h-8 items-center justify-between pl-2">
+        {toggle ? (
+          <button
+            type="button"
+            onClick={toggle.set}
+            className="section-label flex items-center gap-1 px-0 hover:text-muted"
           >
+            {toggle.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            {label}
+          </button>
+        ) : (
+          <span className="section-label px-0">{label}</span>
+        )}
+        {onAdd && (
+          <IconButton label={`new ${label.toLowerCase()} channel`} size="sm" onClick={onAdd}>
             <Plus />
-          </Button>
+          </IconButton>
         )}
       </div>
-      {channels.map((c) => {
-        const count = unread[c.id] ?? 0;
-        return (
-          <div key={c.id} className="group/dm relative">
-            <Button
-              variant={selected?.id === c.id ? "secondary" : "ghost"}
-              onClick={() => onSelect(c)}
-              className={cn(
-                "w-full justify-start gap-2 pr-7 font-normal",
-                count > 0 && "font-semibold text-gold",
-              )}
-            >
-              {icon}
-              <span className="flex-1 truncate text-left">{c.name}</span>
-              {count > 0 && (
-                <span className="shrink-0 rounded-full bg-gold px-1.5 text-xs leading-5 text-bg">
-                  {count}
-                </span>
-              )}
-            </Button>
-            {onClose && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onClose(c)}
-                title="close dm"
-                className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
-              >
-                <X />
-              </Button>
-            )}
-            {onDelete && !c.permanent && (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onDelete(c)}
-                title="delete channel"
-                className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/dm:opacity-100"
-              >
-                <Trash2 />
-              </Button>
-            )}
-          </div>
-        );
-      })}
+      {children}
     </div>
   );
 }
 
-function ChannelForm({
-  value,
-  onChange,
+function ChannelRow({
+  icon,
+  name,
+  badge,
+  active,
+  onSelect,
+  actions,
+}: {
+  icon: ReactNode;
+  name: string;
+  badge?: number;
+  active: boolean;
+  onSelect: () => void;
+  actions?: (close: () => void) => ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn("row flex-1", active && "row-active", !active && !!badge && "row-unread")}
+      >
+        <span className="text-faint">{icon}</span>
+        <span className="flex-1 truncate">{name}</span>
+        {!!badge && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
+      </button>
+      {actions && (
+        <Menu trigger={<MoreButton />}>
+          {actions}
+        </Menu>
+      )}
+    </div>
+  );
+}
+
+function VoiceRow({
+  channel,
+  voice,
+  occupants,
+  onDelete,
+}: {
+  channel: Channel;
+  voice: Voice;
+  occupants: VoiceOccupant[];
+  onDelete: () => void;
+}) {
+  const active = voice.channel?.id === channel.id;
+  return (
+    <div>
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => (active ? voice.leave() : voice.join(channel))}
+          className={cn("row flex-1", active && "row-active")}
+        >
+          <span className="text-faint">
+            <Volume2 size={14} />
+          </span>
+          <span className="flex-1 truncate">{channel.name}</span>
+          <span className="text-xs text-faint">{active ? "leave" : "join"}</span>
+        </button>
+        {!channel.permanent && occupants.length === 0 && (
+          <Menu trigger={<MoreButton />}>
+            {(close) => (
+              <MenuItem onClick={() => (close(), onDelete())} danger>
+                delete channel
+              </MenuItem>
+            )}
+          </Menu>
+        )}
+      </div>
+      {occupants.length > 0 && (
+        <ul className="space-y-0.5 pb-1 pl-7">
+          {occupants.map((o) => (
+            <li key={o.name} className="flex items-center gap-2 text-sm text-muted">
+              <Dot on={active && voice.speaking.includes(o.name)} />
+              <span className="min-w-0 flex-1 truncate">{o.name}</span>
+              <VoiceMarks muted={o.muted} deafened={o.deafened} className="pr-1" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function UserList({
+  users,
+  online,
+  onSelectUser,
+}: {
+  users: UserSummary[];
+  online: Set<string>;
+  onSelectUser: (u: UserSummary) => void;
+}) {
+  const sorted = [...users].sort(
+    (a, b) =>
+      Number(online.has(b.username)) - Number(online.has(a.username)) ||
+      a.username.localeCompare(b.username),
+  );
+  return (
+    <ul className="space-y-0.5">
+      {sorted.map((u) => (
+        <li key={u.id}>
+          <button
+            type="button"
+            onClick={() => onSelectUser(u)}
+            className={cn("row w-full", !online.has(u.username) && "text-faint")}
+          >
+            <Dot on={online.has(u.username)} />
+            <span className="flex-1 truncate">{u.username}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NewChannel({
   onSubmit,
   onCancel,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
+  onSubmit: (name: string) => void;
   onCancel: () => void;
 }) {
+  const [name, setName] = useState("");
   return (
     <form
-      className="px-2 py-1"
+      className="px-1 py-1"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit();
+        if (name.trim()) onSubmit(name.trim());
       }}
     >
-      <Input
+      <input
         autoFocus
-        value={value}
+        value={name}
         placeholder="channel name"
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onCancel();
-        }}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && onCancel()}
+        onBlur={onCancel}
+        className="input input-md"
       />
     </form>
   );
 }
 
-function VoiceChannel({
-  channel,
-  voice,
-  occupants,
-  openShare,
-  onOpenShare,
-  username,
-  onDelete,
-}: {
-  channel: Channel;
-  voice: Voice;
-  occupants: string[];
-  openShare: string | null;
-  onOpenShare: (id: string) => void;
-  username: string;
-  onDelete: (c: Channel) => void;
-}) {
-  const active = voice.channel?.id === channel.id;
+function MoreButton() {
   return (
-    <div className="pb-1">
-      <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-sepia/70">
-        <Volume2 size={14} />
-        <span className="flex-1 truncate">{channel.name}</span>
-        {active ? (
-          <>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              onClick={() => voice.toggleMute()}
-              title={voice.muted ? "unmute" : "mute"}
-            >
-              {voice.muted ? <MicOff /> : <Mic />}
-            </Button>
-            <Button
-              size="icon-xs"
-              variant={voice.sharing ? "secondary" : "ghost"}
-              className={voice.sharing ? "text-gold" : undefined}
-              aria-pressed={voice.sharing}
-              disabled={!canShare}
-              onClick={() => voice.toggleShare()}
-              title={
-                !canShare
-                  ? "screen share needs https (or localhost)"
-                  : voice.sharing
-                    ? "stop sharing"
-                    : "share screen"
-              }
-            >
-              {voice.sharing ? <ScreenShareOff /> : <ScreenShare />}
-            </Button>
-            <Button size="icon-xs" variant="ghost" onClick={() => voice.leave()} title="leave">
-              <PhoneOff />
-            </Button>
-          </>
-        ) : (
-          <Button
-            size="xs"
-            variant="ghost"
-            className="text-xs text-sepia/50"
-            onClick={() => voice.join(channel)}
-          >
-            join
-          </Button>
-        )}
-        {!channel.permanent && occupants.length === 0 && (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => onDelete(channel)}
-            title="delete channel"
-          >
-            <Trash2 />
-          </Button>
-        )}
-      </div>
-      {active && (
-        <div className="flex flex-col gap-0.5 px-2 pb-0.5">
-          {voice.status !== "live" ? (
-            <span className="truncate text-xs text-sepia/50">
-              {voice.status === "connecting" ? "connecting…" : voice.error || "disconnected"}
-            </span>
-          ) : (
-            <VoicePeers
-              voice={voice}
-              username={username}
-              openShare={openShare}
-              onOpenShare={onOpenShare}
-            />
-          )}
-        </div>
-      )}
-      {!active && occupants.length > 0 && (
-        <div className="flex flex-col gap-0.5 pb-0.5 pl-3.5 pr-2">
-          {occupants.map((name) => (
-            <span key={name} className="truncate text-sm text-sepia/70">
-              {name}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+    <IconButton label="more actions" size="sm">
+      <MoreHorizontal />
+    </IconButton>
+  );
+}
+
+function InviteButton() {
+  const [copied, setCopied] = useState(false);
+  async function invite() {
+    try {
+      const { token } = await api<{ token: string }>("/invites", { method: "POST" });
+      await navigator.clipboard.writeText(`${window.location.origin}/join?token=${token}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard or API refused; nothing useful to show here
+    }
+  }
+  return (
+    <IconButton label={copied ? "invite link copied" : "create invite link"} size="sm" onClick={invite}>
+      {copied ? <Check /> : <UserPlus />}
+    </IconButton>
   );
 }

@@ -2,17 +2,39 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <script>
+      // Applied before first paint: mode, palette and the user's color
+      // overrides, plus their font-size preference.
       (function () {
-        var t = localStorage.getItem("theme");
-        if (t !== "light" && t !== "dark") {
-          t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        var prefs = null;
+        try {
+          prefs = JSON.parse(localStorage.getItem("irvc.theme"));
+        } catch (e) {
+          var legacy = localStorage.getItem("irvc.theme");
+          if (legacy === "light" || legacy === "dark") prefs = { mode: legacy };
+          else if (legacy === "tuxedo" || legacy === "nicotine") prefs = { preset: legacy };
         }
-        var c = document.documentElement.classList;
-        c.toggle("dark", t === "dark");
-        c.toggle("theme-tuxedo", localStorage.getItem("irvc.theme") === "tuxedo");
+        if (!prefs || typeof prefs !== "object") {
+          prefs = { mode: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" };
+        }
+        var el = document.documentElement;
+        el.classList.toggle("dark", prefs.mode === "dark");
+        el.dataset.preset = prefs.preset === "tuxedo" ? "tuxedo" : "nicotine";
+        var over = (prefs.overrides && prefs.overrides[prefs.mode]) || {};
+        for (var t in over) {
+          el.style.setProperty(
+            "--" + t.replace(/[A-Z]/g, function (c) {
+              return "-" + c.toLowerCase();
+            }),
+            over[t],
+          );
+        }
+        try {
+          var s = JSON.parse(localStorage.getItem("irvc.settings")) || {};
+          el.style.fontSize = { default: "", normal: "16px", large: "18px" }[s.fontSize] || "16px";
+        } catch (e) {}
       })();
     </script>
     <link

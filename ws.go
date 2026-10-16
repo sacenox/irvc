@@ -16,19 +16,30 @@ import (
 )
 
 type event struct {
-	Type      string              `json:"type"`
-	Message   *Message            `json:"message,omitempty"`
-	Users     []string            `json:"users,omitempty"`
-	Roster    []userSummary       `json:"roster,omitempty"`
-	Voice     map[string][]string `json:"voice,omitempty"`
-	Channel   *Channel            `json:"channel,omitempty"`
-	ChannelID int64               `json:"channelId,omitempty"`
+	Type      string                     `json:"type"`
+	Message   *Message                   `json:"message,omitempty"`
+	Users     []string                   `json:"users,omitempty"`
+	Roster    []userSummary              `json:"roster,omitempty"`
+	Voice     map[string][]VoiceOccupant `json:"voice,omitempty"`
+	Channel   *Channel                   `json:"channel,omitempty"`
+	ChannelID int64                      `json:"channelId,omitempty"`
+}
+
+// VoiceOccupant is one user in a voice channel, as broadcast with presence.
+// A user with several connections counts as muted or deafened only when every
+// one of them is, so a second unmuted tab is never hidden.
+type VoiceOccupant struct {
+	Name     string `json:"name"`
+	Muted    bool   `json:"muted"`
+	Deafened bool   `json:"deafened"`
 }
 
 // wsIn is a message sent from a client over the socket.
 type wsIn struct {
 	Type      string `json:"type"`
 	ChannelID int64  `json:"channelId"`
+	Muted     bool   `json:"muted"`
+	Deafened  bool   `json:"deafened"`
 }
 
 type client struct {
@@ -36,6 +47,8 @@ type client struct {
 	userID   int64
 	username string
 	voiceID  int64
+	muted    bool
+	deafened bool
 	conn     *websocket.Conn
 	send     chan []byte
 }
@@ -89,13 +102,16 @@ func (h *hub) clearVoiceLocked(c *client) {
 	c.voiceID = 0
 }
 
-// setVoice moves a client into a voice channel (0 for none) and rebroadcasts.
-// Occupancy is keyed by connection, not user, so one tab leaving a channel
-// does not evict another tab that is still in it.
-func (h *hub) setVoice(c *client, channelID int64) {
+// setVoice moves a client into a voice channel (0 for none) with its current
+// mute and deafen state, and rebroadcasts. Occupancy is keyed by connection,
+// not user, so one tab leaving a channel does not evict another tab that is
+// still in it.
+func (h *hub) setVoice(c *client, channelID int64, muted, deafened bool) {
 	h.mu.Lock()
 	h.clearVoiceLocked(c)
 	c.voiceID = channelID
+	c.muted = muted
+	c.deafened = deafened
 	if channelID != 0 {
 		if h.voice[channelID] == nil {
 			h.voice[channelID] = map[*client]bool{}
@@ -180,21 +196,31 @@ func (h *hub) voiceOccupied(channelID int64) bool {
 	return len(h.voice[channelID]) > 0
 }
 
-func (h *hub) voiceUsers() map[string][]string {
+func (h *hub) voiceUsers() map[string][]VoiceOccupant {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out := map[string][]string{}
+	out := map[string][]VoiceOccupant{}
 	for channelID, set := range h.voice {
-		seen := map[string]bool{}
-		names := make([]string, 0, len(set))
+		byName := map[string]*VoiceOccupant{}
 		for c := range set {
-			if !seen[c.username] {
-				seen[c.username] = true
-				names = append(names, c.username)
+			o := byName[c.username]
+			if o == nil {
+				o = &VoiceOccupant{Name: c.username, Muted: true, Deafened: true}
+				byName[c.username] = o
 			}
+			o.Muted = o.Muted && c.muted
+			o.Deafened = o.Deafened && c.deafened
+		}
+		names := make([]string, 0, len(byName))
+		for name := range byName {
+			names = append(names, name)
 		}
 		sort.Strings(names)
-		out[strconv.FormatInt(channelID, 10)] = names
+		occupants := make([]VoiceOccupant, 0, len(names))
+		for _, name := range names {
+			occupants = append(occupants, *byName[name])
+		}
+		out[strconv.FormatInt(channelID, 10)] = occupants
 	}
 	return out
 }
@@ -272,7 +298,7 @@ func (c *client) readPump() {
 		}
 		switch in.Type {
 		case "voice":
-			c.hub.setVoice(c, in.ChannelID)
+			c.hub.setVoice(c, in.ChannelID, in.Muted, in.Deafened)
 		case "ping":
 			// Application-level heartbeat: the browser answers protocol pings
 			// itself, so a client cannot see them. This lets it detect a

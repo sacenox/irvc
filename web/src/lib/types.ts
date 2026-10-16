@@ -36,6 +36,13 @@ export interface Gif {
   preview: string;
 }
 
+// One user sitting in a voice channel, as broadcast with presence.
+export interface VoiceOccupant {
+  name: string;
+  muted: boolean;
+  deafened: boolean;
+}
+
 export interface WSEvent {
   type:
     | "message"
@@ -48,7 +55,7 @@ export interface WSEvent {
   message?: Message;
   users?: string[];
   roster?: UserSummary[];
-  voice?: Record<string, string[]>;
+  voice?: Record<string, VoiceOccupant[]>;
   channel?: Channel;
   channelId?: number;
 }
