@@ -166,6 +166,16 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     localStorage.setItem(hiddenDmsKey, JSON.stringify(hiddenDms));
   }, [hiddenDms]);
 
+  // Escape dismisses the message actions pane, same as its close button.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActive(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
     setEditing(null);
