@@ -7,6 +7,8 @@ import {
   PhoneOff,
   ScreenShare,
   ScreenShareOff,
+  Video,
+  VideoOff,
   VolumeX,
 } from "lucide-react";
 import { cn } from "cn";
@@ -145,6 +147,15 @@ export default function VoiceBar({
         >
           {deafened ? <HeadphoneOff /> : <Headphones />}
         </IconButton>
+        {voice.channel.type === "dm" && (
+          <IconButton
+            label={voice.cameraOn ? "turn camera off" : "turn camera on"}
+            variant={voice.cameraOn ? "secondary" : "ghost"}
+            onClick={voice.toggleCamera}
+          >
+            {voice.cameraOn ? <Video /> : <VideoOff />}
+          </IconButton>
+        )}
         <IconButton
           label={!canShare ? "screen share needs https" : voice.sharing ? "stop sharing" : "share screen"}
           variant={voice.sharing ? "secondary" : "ghost"}

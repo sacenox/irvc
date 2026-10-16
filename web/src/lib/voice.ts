@@ -26,10 +26,11 @@ interface VoiceToken {
 }
 
 // beep plays a short tone for call roster changes (someone joined or left the
-// call you are in). Web Audio needs no asset; it unlocks on the click that
-// joined the call.
-function beep(freq: number) {
+// call you are in) and for an incoming DM ring. Web Audio needs no asset; it
+// unlocks on the click that joined the call.
+export function beep(freq: number) {
   const ctx = new AudioContext();
+  ctx.resume().catch(() => {});
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   gain.gain.value = 0.1;
@@ -223,6 +224,37 @@ function sharesOf(room: Room): Share[] {
   return shares;
 }
 
+// A camera publication, ours or a peer's, in a DM video call.
+export interface Camera {
+  id: string;
+  name: string;
+  self: boolean;
+  track: Track;
+}
+
+function camerasOf(room: Room): Camera[] {
+  const cameras: Camera[] = [];
+  const collect = (p: Participant, self: boolean) => {
+    for (const pub of p.trackPublications.values()) {
+      if (
+        pub.source === Track.Source.Camera &&
+        pub.track?.kind === Track.Kind.Video &&
+        !pub.isMuted
+      ) {
+        cameras.push({
+          id: `${p.identity}:${pub.trackSid}`,
+          name: p.name || p.identity,
+          self,
+          track: pub.track,
+        });
+      }
+    }
+  };
+  collect(room.localParticipant, true);
+  for (const p of room.remoteParticipants.values()) collect(p, false);
+  return cameras;
+}
+
 // micSignature identifies the applied capture + encoding config, so live
 // changes can be detected without republishing on every render.
 function micSignature(s: Settings): string {
@@ -254,11 +286,14 @@ export interface Voice {
   peers: string[];
   speaking: string[];
   shares: Share[];
+  cameras: Camera[];
   sharing: boolean;
+  cameraOn: boolean;
   muted: boolean;
   join: (c: Channel) => void;
   leave: () => void;
   toggleMute: () => void;
+  toggleCamera: () => void;
   toggleShare: () => void;
   setPeerVolume: (name: string, volume: number) => void;
   micLevel: () => number;
@@ -275,6 +310,8 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
   const [peers, setPeers] = useState<string[]>([]);
   const [speaking, setSpeaking] = useState<string[]>([]);
   const [shares, setShares] = useState<Share[]>([]);
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [cameraOn, setCameraOn] = useState(false);
   const [muted, setMuted] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement[]>([]);
@@ -309,6 +346,8 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
     setPeers([]);
     setSpeaking([]);
     setShares([]);
+    setCameras([]);
+    setCameraOn(false);
     setMuted(false);
   }, []);
 
@@ -330,6 +369,7 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
         const sync = () => {
           setPeers([...room.remoteParticipants.values()].map((p) => p.name || p.identity));
           setShares(sharesOf(room));
+          setCameras(camerasOf(room));
         };
         room.on(RoomEvent.ParticipantConnected, () => {
           if (readyRef.current && settingsRef.current.joinSound) beep(440);
@@ -355,6 +395,8 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
           RoomEvent.TrackUnpublished,
           RoomEvent.TrackSubscribed,
           RoomEvent.TrackUnsubscribed,
+          RoomEvent.TrackMuted,
+          RoomEvent.TrackUnmuted,
           RoomEvent.LocalTrackPublished,
           RoomEvent.LocalTrackUnpublished,
         ]) {
@@ -377,6 +419,14 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
         readyRef.current = true;
         const mic = await room.localParticipant.setMicrophoneEnabled(true, capture(s), publish(s));
         if (mic?.audioTrack) await mic.audioTrack.setProcessor(gate.processor);
+        // A DM call is a video call: publish the camera too, falling back to
+        // audio only if the camera is unavailable or denied.
+        if (c.type === "dm") {
+          await room.localParticipant
+            .setCameraEnabled(true)
+            .then(() => setCameraOn(true))
+            .catch(() => {});
+        }
         if (s.speakerDeviceId) {
           await room.switchActiveDevice("audiooutput", s.speakerDeviceId).catch(() => {});
         }
@@ -445,6 +495,17 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
     setMuted(next);
   }, [muted]);
 
+  const toggleCamera = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !cameraOn;
+    // A denied camera stays off; do not claim it is on.
+    await room.localParticipant.setCameraEnabled(next).then(
+      () => setCameraOn(next),
+      () => setCameraOn(false),
+    );
+  }, [cameraOn]);
+
   const toggleShare = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
@@ -481,11 +542,14 @@ export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => vo
     peers,
     speaking,
     shares,
+    cameras,
     sharing: shares.some((s) => s.self),
+    cameraOn,
     muted,
     join,
     leave,
     toggleMute,
+    toggleCamera,
     toggleShare,
     setPeerVolume,
     micLevel,

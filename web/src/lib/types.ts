@@ -51,7 +51,9 @@ export interface WSEvent {
     | "presence"
     | "pong"
     | "channel"
-    | "channel_delete";
+    | "channel_delete"
+    | "ring"
+    | "ring_end";
   message?: Message;
   users?: string[];
   roster?: UserSummary[];

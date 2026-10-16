@@ -135,6 +135,11 @@ export default function SettingsView({
           checked={settings.joinSound}
           onChange={(v) => update({ joinSound: v })}
         />
+        <Toggle
+          label="ringing"
+          checked={settings.ringSound}
+          onChange={(v) => update({ ringSound: v })}
+        />
       </Section>
 
       <Section label="Voice activation">

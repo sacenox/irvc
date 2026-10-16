@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, Hash, Menu, MoreHorizontal, ScreenShare, Settings as SettingsIcon } from "lucide-react";
+import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Video } from "lucide-react";
 import { cn } from "cn";
 import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
 import { usePresence } from "../lib/presence";
 import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
-import { useVoice, type VoiceState } from "../lib/voice";
+import { beep, useVoice, type VoiceState } from "../lib/voice";
 import type { Channel, Message, Reaction, User, UserSummary, VoiceOccupant } from "../lib/types";
+import CallView from "../components/CallView";
 import Composer from "../components/Composer";
 import MessageActions from "../components/MessageActions";
 import MessageList, { hasImage } from "../components/MessageList";
@@ -41,9 +42,12 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
   const [view, setView] = useState<"channel" | "settings">("channel");
   const [openShare, setOpenShare] = useState<string | null>(null);
+  const [ringing, setRinging] = useState<number | null>(null);
   const desktop = useRef(matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
+  // The channel of the DM call we started, so we can tell the peer when it ends.
+  const rangRef = useRef<number | null>(null);
   // The server drops our voice state when the socket dies, so keep the last
   // thing we told it and replay that on every (re)connect.
   const voiceState = useRef<VoiceState>({ channelId: 0, muted: false, deafened: false });
@@ -72,6 +76,23 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setChannels((cs) => (cs.some((c) => c.id === ev.channel!.id) ? cs : [...cs, ev.channel!]));
       } else if (ev.type === "channel_delete" && ev.channelId) {
         setChannels((cs) => cs.filter((c) => c.id !== ev.channelId));
+      } else if (ev.type === "ring" && ev.channelId) {
+        // Answering sends its own ring; ignore it when already in that call.
+        if (voice.channel?.id === ev.channelId) return;
+        setRinging(ev.channelId);
+        // Answering means opening the DM, so surface it for the callee.
+        const dm = channels.find((c) => c.id === ev.channelId);
+        if (dm) open(dm);
+        else
+          api<Channel[]>("/channels")
+            .then((cs) => {
+              setChannels(cs);
+              const c = cs.find((x) => x.id === ev.channelId);
+              if (c) open(c);
+            })
+            .catch(() => {});
+      } else if (ev.type === "ring_end" && ev.channelId) {
+        setRinging((r) => (r === ev.channelId ? null : r));
       } else if (ev.message) {
         if (ev.type === "message") {
           setChannels((cs) => {
@@ -106,6 +127,31 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     send(voiceMessage(state));
   });
   const theme = useTheme();
+
+  // Ring while a peer calls us. The slow beep repeats (when enabled) until we
+  // answer, they hang up, or the call times out as missed.
+  useEffect(() => {
+    if (ringing === null) return;
+    const timeout = setTimeout(() => setRinging(null), 30_000);
+    const sound = settings.ringSound ? (beep(880), setInterval(() => beep(880), 2000)) : 0;
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(sound);
+    };
+  }, [ringing, settings.ringSound]);
+
+  // Joining the call answers the ring.
+  useEffect(() => {
+    if (ringing !== null && voice.channel?.id === ringing) setRinging(null);
+  }, [ringing, voice.channel]);
+
+  // Tell the peer when a DM call we started is over.
+  useEffect(() => {
+    const started = rangRef.current;
+    if (started === null || voice.channel?.id === started) return;
+    rangRef.current = null;
+    api(`/channels/${started}/ring`, { method: "DELETE" }).catch(() => {});
+  }, [voice.channel]);
 
   // The watched share lives in the LiveKit room, so it vanishes when the sharer
   // stops; the pane then falls back to the selected channel.
@@ -175,6 +221,14 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     setView("channel");
     setOpenShare(null);
     if (!desktop.current) setSidebarOpen(false);
+  }
+
+  // startCall opens a DM video call and rings the peer. Joining leaves any
+  // voice channel first, since only one call can use the mic and camera.
+  function startCall(c: Channel) {
+    rangRef.current = c.id;
+    voice.join(c);
+    api(`/channels/${c.id}/ring`, { method: "POST" }).catch(() => {});
   }
 
   async function selectUser(u: UserSummary) {
@@ -254,6 +308,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   const chat = selected?.type === "text" || selected?.type === "dm";
   const showingShare = view === "channel" && share !== null;
+  const inCall = selected?.type === "dm" && voice.channel?.id === selected.id;
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -339,6 +394,16 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                   <Hash size={16} className="text-faint" />
                 ))}
               <span className="truncate text-sm font-medium">{selected?.name}</span>
+              {selected?.type === "dm" && (
+                <IconButton
+                  label={inCall ? "leave call" : ringing === selected.id ? "answer call" : "start video call"}
+                  variant={inCall ? "danger" : ringing === selected.id ? "primary" : "ghost"}
+                  size="sm"
+                  onClick={() => (inCall ? voice.leave() : startCall(selected))}
+                >
+                  {inCall ? <PhoneOff /> : <Video />}
+                </IconButton>
+              )}
               {selected?.type === "text" && !selected.permanent && (
                 <MenuPrimitive
                   className="ml-auto"
@@ -368,37 +433,40 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           <ScreenShareView track={share.track} />
         ) : chat && selected ? (
           <>
-            <MessageList
-              channelId={selected.id}
-              messages={messages}
-              username={user.username}
-              collapsed={collapsed}
-              editing={editing}
-              activeId={active?.id ?? null}
-              onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
-              onToggleImages={toggleImages}
-              onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
-              onCancelEdit={() => setEditing(null)}
-              onSaveEdit={saveEdit}
-            />
-            {active && !editing && (
-              <MessageActions
-                message={active}
-                own={active.username === user.username}
-                onReact={(r) => react(active, r)}
-                onEdit={() => startEdit(active)}
-                onDelete={() => deleteMessage(active)}
-                onClose={() => setActive(null)}
+            {inCall && <CallView voice={voice} className="flex-[3]" />}
+            <div className={cn("flex min-h-0 flex-1 flex-col", inCall && "flex-[1] border-t border-line")}>
+              <MessageList
+                channelId={selected.id}
+                messages={messages}
+                username={user.username}
+                collapsed={collapsed}
+                editing={editing}
+                activeId={active?.id ?? null}
+                onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
+                onToggleImages={toggleImages}
+                onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
+                onCancelEdit={() => setEditing(null)}
+                onSaveEdit={saveEdit}
               />
-            )}
-            <Composer
-              channel={selected}
-              users={users}
-              onEditLast={startEditLast}
-              onCollapseImages={() =>
-                setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)))
-              }
-            />
+              {active && !editing && (
+                <MessageActions
+                  message={active}
+                  own={active.username === user.username}
+                  onReact={(r) => react(active, r)}
+                  onEdit={() => startEdit(active)}
+                  onDelete={() => deleteMessage(active)}
+                  onClose={() => setActive(null)}
+                />
+              )}
+              <Composer
+                channel={selected}
+                users={users}
+                onEditLast={startEditLast}
+                onCollapseImages={() =>
+                  setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)))
+                }
+              />
+            </div>
           </>
         ) : (
           <Centered>select a channel</Centered>

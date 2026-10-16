@@ -142,6 +142,8 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.DELETE("/messages/:id", s.handleDeleteMessage)
 	authed.POST("/messages/:id/reactions", s.handleToggleReaction)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
+	authed.POST("/channels/:id/ring", s.handleRing(true))
+	authed.DELETE("/channels/:id/ring", s.handleRing(false))
 	authed.POST("/invites", s.handleCreateInvite)
 	authed.GET("/gifs", s.handleGifs)
 	authed.POST("/upload", s.handleUpload)

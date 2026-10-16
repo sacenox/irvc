@@ -26,6 +26,7 @@ export interface Settings {
   deafened: boolean;
   gateThreshold: number;
   joinSound: boolean;
+  ringSound: boolean;
   screenShareQuality: ScreenShareQuality;
   fontSize: FontSize;
 }
@@ -41,6 +42,7 @@ export const defaultSettings: Settings = {
   deafened: false,
   gateThreshold: -60,
   joinSound: true,
+  ringSound: true,
   screenShareQuality: "720p",
   fontSize: "normal",
 };

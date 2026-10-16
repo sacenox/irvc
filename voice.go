@@ -62,12 +62,20 @@ func (s *Server) handleVoiceToken(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
 		return
 	}
-	var channelType string
-	if err := s.db.QueryRow(`SELECT type FROM channels WHERE id = ?`, channelID).Scan(&channelType); err != nil {
+	var channelType, channelName string
+	if err := s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, channelID).Scan(&channelType, &channelName); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel not found"})
 		return
 	}
-	if channelType != "voice" {
+	user := c.MustGet("user").(User)
+	// A DM call is a call in the DM, so it mints the same kind of token; only
+	// voice channels and the caller's own DMs may be joined.
+	if channelType == "dm" {
+		if _, ok := dmPeer(channelName, user.ID); !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	} else if channelType != "voice" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "not a voice channel"})
 		return
 	}
@@ -75,7 +83,6 @@ func (s *Server) handleVoiceToken(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "voice not configured"})
 		return
 	}
-	user := c.MustGet("user").(User)
 	room := fmt.Sprintf("voice-%d", channelID)
 	token := livekitToken(s.cfg.LiveKitKey, s.cfg.LiveKitSecret, strconv.FormatInt(user.ID, 10), user.Username, room)
 	c.JSON(http.StatusOK, gin.H{"url": s.cfg.LiveKitURL, "token": token, "room": room})

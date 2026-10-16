@@ -26,6 +26,18 @@ func parseDM(name string) (int64, int64, bool) {
 	return u1, u2, true
 }
 
+// dmPeer returns the other participant of a DM named name, if userID is one.
+func dmPeer(name string, userID int64) (int64, bool) {
+	u1, u2, ok := parseDM(name)
+	if !ok || (u1 != userID && u2 != userID) {
+		return 0, false
+	}
+	if u1 == userID {
+		return u2, true
+	}
+	return u1, true
+}
+
 func (s *Server) notifyChannel(channelType, channelName string, ev event) {
 	if channelType == "dm" {
 		if u1, u2, ok := parseDM(channelName); ok {
@@ -239,6 +251,39 @@ func (s *Server) handleOpenDM(c *gin.Context) {
 	}
 	ch.Name = peerName
 	c.JSON(http.StatusOK, ch)
+}
+
+// handleRing propagates a DM call ring, or its end, to the other participant
+// so their client can sound the incoming-call tone.
+func (s *Server) handleRing(ringing bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
+			return
+		}
+		user := c.MustGet("user").(User)
+		var chType, chName string
+		if err := s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, channelID).Scan(&chType, &chName); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "channel not found"})
+			return
+		}
+		if chType != "dm" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "not a dm"})
+			return
+		}
+		peerID, ok := dmPeer(chName, user.ID)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if ringing {
+			s.hub.sendTo(event{Type: "ring", ChannelID: channelID}, peerID)
+		} else {
+			s.hub.sendTo(event{Type: "ring_end", ChannelID: channelID}, peerID)
+		}
+		c.Status(http.StatusNoContent)
+	}
 }
 
 func (s *Server) checkTextOrDM(c *gin.Context, channelID, userID int64) (string, string, bool) {
