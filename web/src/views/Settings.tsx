@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Moon, RotateCcw, Sun } from "lucide-react";
 import { Room } from "livekit-client";
 import { Button, Field, Section, Select, Toggle } from "@/ui";
@@ -105,7 +105,7 @@ export default function SettingsView({
             options={[
               { value: "normal", label: "normal" },
               { value: "default", label: "browser default" },
-              { value: "large", label: "large" },
+              { value: "large", label: "Help I'm old" },
             ]}
           />
         </Field>
@@ -117,6 +117,8 @@ export default function SettingsView({
             <ColorField
               key={t}
               token={t}
+              mode={prefs.mode}
+              preset={prefs.preset}
               override={prefs.overrides[prefs.mode][t]}
               onChange={(color) => setToken(t, color)}
             />
@@ -231,15 +233,21 @@ export default function SettingsView({
 
 function ColorField({
   token,
+  mode,
+  preset,
   override,
   onChange,
 }: {
   token: Token;
+  mode: Mode;
+  preset: PresetId;
   override?: string;
   onChange: (color: string) => void;
 }) {
-  // Re-read the palette whenever anything that feeds it changes.
-  const value = useMemo(() => effective(token), [token, override]);
+  // Re-read the palette after the theme has been applied to the DOM, so the
+  // swatch never shows the previous mode's or preset's colors.
+  const [value, setValue] = useState(() => effective(token));
+  useEffect(() => setValue(effective(token)), [token, override, mode, preset]);
   return (
     <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-raised">
       <input

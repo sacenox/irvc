@@ -87,12 +87,14 @@ export default function Sidebar({
               badge={unread[c.id]}
               active={selected?.id === c.id}
               onSelect={() => onSelect(c)}
-              actions={(close) =>
-                !c.permanent && (
-                  <MenuItem onClick={() => (close(), onDeleteChannel(c))} danger>
-                    delete channel
-                  </MenuItem>
-                )
+              actions={
+                c.permanent
+                  ? undefined
+                  : (close) => (
+                      <MenuItem onClick={() => (close(), onDeleteChannel(c))} danger>
+                        delete channel
+                      </MenuItem>
+                    )
               }
             />
           ))}

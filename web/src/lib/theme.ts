@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 export type Mode = "light" | "dark";
 
@@ -114,7 +114,9 @@ function rgbToHex(color: string) {
 export function useTheme() {
   const [prefs, setPrefs] = useState<ThemePrefs>(loadPrefs);
 
-  useEffect(() => {
+  // Applied before the browser paints so anything reading the computed
+  // palette (the settings color swatches) sees the new mode immediately.
+  useLayoutEffect(() => {
     applyTheme(prefs);
     localStorage.setItem(key, JSON.stringify(prefs));
   }, [prefs]);

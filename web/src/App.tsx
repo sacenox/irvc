@@ -7,19 +7,12 @@ import Join from "./views/Join";
 import Login from "./views/Login";
 import Chat from "./views/Chat";
 
-// Text size is a document-level preference, applied on the root element so
-// every rem-based size follows it.
-const fontSizes: Record<string, string> = { default: "", normal: "16px", large: "18px" };
-
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showJoin, setShowJoin] = useState(window.location.pathname === "/join");
-  const { settings } = useSettings();
-
-  useEffect(() => {
-    document.documentElement.style.fontSize = fontSizes[settings.fontSize] ?? "16px";
-  }, [settings.fontSize]);
+  // Applied here too so the logged-out screens follow the text size preference.
+  useSettings();
 
   useEffect(() => {
     api<User>("/me")

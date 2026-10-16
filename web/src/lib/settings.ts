@@ -49,6 +49,10 @@ export const defaultSettings: Settings = {
 
 const key = "irvc.settings";
 
+// Text size is a document-level preference, applied on the root element so
+// every rem-based size follows it. "default" leaves the browser's root size.
+const fontSizes: Record<FontSize, string> = { default: "", normal: "16px", large: "18px" };
+
 function load(): Settings {
   try {
     return { ...defaultSettings, ...JSON.parse(localStorage.getItem(key) ?? "{}") };
@@ -64,6 +68,7 @@ export function useSettings() {
 
   useEffect(() => {
     localStorage.setItem(key, JSON.stringify(settings));
+    document.documentElement.style.fontSize = fontSizes[settings.fontSize];
   }, [settings]);
 
   const update = useCallback((patch: Partial<Settings>) => {
