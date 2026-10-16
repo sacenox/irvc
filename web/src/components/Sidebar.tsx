@@ -19,6 +19,7 @@ import { byName } from "../lib/channels";
 import type { Channel, UserSummary, VoiceOccupant } from "../lib/types";
 import type { Voice } from "../lib/voice";
 import VoiceBar from "./VoiceBar";
+import { userColor } from "../lib/scheme";
 
 interface Props {
   channels: Channel[];
@@ -115,6 +116,10 @@ export default function Sidebar({
               channel={c}
               voice={voice}
               occupants={voiceRooms[String(c.id)] ?? []}
+              deafened={deafened}
+              onDeafen={onDeafen}
+              openShare={openShare}
+              onOpenShare={onOpenShare}
               onDelete={() => onDeleteChannel(c)}
             />
           ))}
@@ -153,7 +158,8 @@ export default function Sidebar({
       </nav>
 
       <div className="shrink-0 px-2 pb-2">
-        {voice.channel && (
+        {/* Voice channel calls render in place in the Voice list; DM calls have no row. */}
+        {voice.channel?.type === "dm" && (
           <VoiceBar
             voice={voice}
             deafened={deafened}
@@ -233,21 +239,27 @@ function ChannelRow({
   actions?: (close: () => void) => ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-0.5">
+    // The wrapper carries the active/hover chrome so it surrounds the actions button too.
+    <div
+      className={cn(
+        "flex items-center rounded-md border pr-1 transition-colors",
+        active ? "border-line bg-raised" : "border-transparent hover:bg-raised",
+      )}
+    >
       <button
         type="button"
         onClick={onSelect}
-        className={cn("row flex-1", active && "row-active", !active && !!badge && "row-unread")}
+        className={cn(
+          "row flex-1 hover:bg-transparent",
+          active && "font-medium text-fg",
+          !active && !!badge && "row-unread",
+        )}
       >
         <span className="text-faint">{icon}</span>
         <span className="flex-1 truncate">{name}</span>
         {!!badge && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
       </button>
-      {actions && (
-        <Menu trigger={<MoreButton />}>
-          {actions}
-        </Menu>
-      )}
+      {actions && <Menu trigger={<MoreButton />}>{actions}</Menu>}
     </div>
   );
 }
@@ -256,27 +268,48 @@ function VoiceRow({
   channel,
   voice,
   occupants,
+  deafened,
+  onDeafen,
+  openShare,
+  onOpenShare,
   onDelete,
 }: {
   channel: Channel;
   voice: Voice;
   occupants: VoiceOccupant[];
+  deafened: boolean;
+  onDeafen: (value: boolean) => void;
+  openShare?: string | null;
+  onOpenShare?: (id: string) => void;
   onDelete: () => void;
 }) {
   const active = voice.channel?.id === channel.id;
+  // Once joined, the row becomes the call panel: same outline, roster and controls.
+  if (active)
+    return (
+      <VoiceBar
+        voice={voice}
+        deafened={deafened}
+        onDeafen={onDeafen}
+        openShare={openShare}
+        onOpenShare={onOpenShare}
+        occupants={occupants}
+        className="my-1"
+      />
+    );
   return (
     <div>
       <div className="flex items-center gap-0.5">
         <button
           type="button"
-          onClick={() => (active ? voice.leave() : voice.join(channel))}
-          className={cn("row flex-1", active && "row-active")}
+          onClick={() => voice.join(channel)}
+          className="row flex-1"
         >
           <span className="text-faint">
             <Volume2 size={14} />
           </span>
           <span className="flex-1 truncate">{channel.name}</span>
-          <span className="text-xs text-faint">{active ? "leave" : "join"}</span>
+          <span className="text-xs text-faint">join</span>
         </button>
         {!channel.permanent && occupants.length === 0 && (
           <Menu trigger={<MoreButton />}>
@@ -292,8 +325,10 @@ function VoiceRow({
         <ul className="space-y-0.5 pb-1 pl-7">
           {occupants.map((o) => (
             <li key={o.name} className="flex items-center gap-2 text-sm text-muted">
-              <Dot on={active && voice.speaking.includes(o.name)} />
-              <span className="min-w-0 flex-1 truncate">{o.name}</span>
+              <Dot on={false} />
+              <span className="min-w-0 flex-1 truncate" style={{ color: userColor(o.name) }}>
+                {o.name}
+              </span>
               <VoiceMarks muted={o.muted} deafened={o.deafened} className="pr-1" />
             </li>
           ))}
@@ -327,7 +362,12 @@ function UserList({
             className={cn("row w-full", !online.has(u.username) && "text-faint")}
           >
             <Dot on={online.has(u.username)} />
-            <span className="flex-1 truncate">{u.username}</span>
+            <span
+              className="flex-1 truncate"
+              style={online.has(u.username) ? { color: userColor(u.username) } : undefined}
+            >
+              {u.username}
+            </span>
           </button>
         </li>
       ))}
@@ -366,7 +406,7 @@ function NewChannel({
 
 function MoreButton() {
   return (
-    <IconButton label="more actions" size="sm">
+    <IconButton label="more actions" size="sm" className="hover:bg-surface">
       <MoreHorizontal />
     </IconButton>
   );

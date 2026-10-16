@@ -1,4 +1,4 @@
-import { Component, createContext, useContext, useState, type ReactNode } from "react";
+import { Component, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -7,17 +7,25 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 const Collapsed = createContext(false);
 
 // Images render inline; clicking one opens it in a full-window focus dialog.
-// When the message's header is collapsed, images shrink to an alt-text chip.
+// When the message's header is collapsed, images are hidden and their names
+// show as chips beside the header toggle.
 function Image({ src, alt }: { src?: string; alt?: string }) {
   const [open, setOpen] = useState(false);
   const collapsed = useContext(Collapsed);
+  // Esc closes the viewer. Capture phase + stopPropagation so it doesn't also
+  // dismiss whatever else listens for Escape (e.g. the message actions pane).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
   if (!src) return alt ? <span>{alt}</span> : null;
-  if (collapsed)
-    return (
-      <span className="my-1 inline-block rounded-md border border-line bg-surface px-2 py-0.5 text-xs text-muted">
-        {alt || "image"}
-      </span>
-    );
+  if (collapsed) return null; // names are shown in the header row instead
   return (
     <>
       <img
@@ -76,19 +84,31 @@ export default function Markdown({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const count = (text.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+  const names = [...text.matchAll(/!\[([^\]]*)\]\([^)]+\)/g)].map((m) => m[1] || "image");
+  const count = names.length;
   return (
     <Fallback text={text}>
       {count > 0 && (
-        <button
-          type="button"
-          onClick={onToggle}
-          title={collapsed ? "show images" : "hide images"}
-          className="flex w-full items-center gap-1 text-xs leading-6 text-faint hover:text-muted"
-        >
-          {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-          {count} image{count > 1 ? "s" : ""}
-        </button>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <button
+            type="button"
+            onClick={onToggle}
+            title={collapsed ? "show images" : "hide images"}
+            className="flex items-center gap-1 text-xs leading-6 text-faint hover:text-muted"
+          >
+            {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
+            {count} image{count > 1 ? "s" : ""}
+          </button>
+          {collapsed &&
+            names.map((name, i) => (
+              <span
+                key={i}
+                className="rounded-md border border-line bg-surface px-2 py-0.5 text-xs text-muted"
+              >
+                {name}
+              </span>
+            ))}
+        </div>
       )}
       <Collapsed.Provider value={collapsed}>
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>

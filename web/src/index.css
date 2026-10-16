@@ -207,9 +207,6 @@
   .row {
     @apply flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-raised hover:text-fg;
   }
-  .row-active {
-    @apply bg-raised font-medium text-fg;
-  }
   .row-unread {
     @apply font-medium text-accent;
   }
