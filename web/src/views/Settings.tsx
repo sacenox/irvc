@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Moon, RotateCcw, Sun } from "lucide-react";
 import { Room } from "livekit-client";
-import { Button, Field, Section, Select, Toggle } from "@/ui";
+import { Button, Field, Section, Select, TextInput, Toggle } from "@/ui";
 import type { AudioPresetName, FontSize, ScreenShareQuality, Settings as Prefs } from "../lib/settings";
 import {
   TOKENS,
@@ -13,6 +13,7 @@ import {
   type ThemePrefs,
   type Token,
 } from "../lib/theme";
+import type { Scheme } from "../lib/scheme";
 import { useMicPreview, type Voice } from "../lib/voice";
 
 const minDb = -60;
@@ -66,6 +67,8 @@ export default function SettingsView({
     setPreset: (p: PresetId) => void;
     setToken: (t: Token, color: string) => void;
     resetTokens: () => void;
+    setScheme: (s: Scheme) => void;
+    setSkittles: (v: boolean) => void;
   };
 }) {
   const mics = useDevices("audioinput");
@@ -74,7 +77,7 @@ export default function SettingsView({
   // preview. In a call, reuse the live level to avoid capturing twice.
   const preview = useMicPreview(settings, voice.status !== "live");
   const meter = voice.status === "live" ? voice.micLevel : preview;
-  const { prefs, setMode, setPreset, setToken, resetTokens } = theme;
+  const { prefs, setMode, setPreset, setToken, resetTokens, setScheme, setSkittles } = theme;
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 p-4 md:p-6">
@@ -124,7 +127,14 @@ export default function SettingsView({
             />
           ))}
         </div>
-        <div className="px-2 pt-1">
+        <div className="space-y-1 pt-2">
+          <h3 className="section-label px-2">experimental</h3>
+          <Field label="external palette">
+            <SchemePicker current={prefs.scheme?.name} onPick={setScheme} />
+          </Field>
+          <Toggle label="skittles" checked={prefs.skittles} onChange={setSkittles} />
+        </div>
+        <div className="flex justify-end px-2 pt-1">
           <Button variant="ghost" onClick={resetTokens}>
             <RotateCcw /> reset to palette
           </Button>
@@ -281,5 +291,43 @@ function Level({ meter, threshold }: { meter: () => number; threshold: number })
       <div ref={ref} className="h-full bg-accent/70" />
       <div className="absolute inset-y-0 w-0.5 bg-fg/60" style={{ left: `${dbPct(threshold)}%` }} />
     </div>
+  );
+}
+
+// SchemePicker is a text box with native autocomplete over the bundled terminal
+// schemes. The list is a separate chunk, only fetched once the box is used.
+function SchemePicker({ current, onPick }: { current?: string; onPick: (s: Scheme) => void }) {
+  const [schemes, setSchemes] = useState<Scheme[]>([]);
+  const [text, setText] = useState(current ?? "");
+
+  useEffect(() => setText(current ?? ""), [current]);
+
+  function load() {
+    if (!schemes.length) import("../lib/schemes.json").then((m) => setSchemes(m.default as Scheme[]));
+  }
+
+  function change(v: string) {
+    setText(v);
+    const hit = schemes.find((s) => s.n.toLowerCase() === v.trim().toLowerCase());
+    if (hit) onPick(hit);
+  }
+
+  return (
+    <>
+      <TextInput
+        list="schemes"
+        value={text}
+        placeholder="search…"
+        autoComplete="off"
+        spellCheck={false}
+        onFocus={load}
+        onChange={(e) => change(e.target.value)}
+      />
+      <datalist id="schemes">
+        {schemes.map((s) => (
+          <option key={s.n} value={s.n} />
+        ))}
+      </datalist>
+    </>
   );
 }

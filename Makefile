@@ -10,6 +10,7 @@ frontend:
 
 fmt:
 	goimports -w $$(find . -name '*.go' -not -path './web/node_modules/*')
+	cd web && npm run fmt && npm run lint
 
 test:
 	go test ./...

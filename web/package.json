@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "oxlint",
+    "schemes": "node scripts/schemes.mjs ../fruit src/lib/schemes.json",
     "fmt": "oxfmt"
   },
   "dependencies": {

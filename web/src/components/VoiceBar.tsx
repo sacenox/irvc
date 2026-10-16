@@ -9,12 +9,14 @@ import {
   ScreenShareOff,
   Video,
   VideoOff,
+  Volume2,
   VolumeX,
 } from "lucide-react";
 import { cn } from "cn";
 import { Dot, IconButton, Menu, MenuItem, VoiceMarks } from "@/ui";
 import type { VoiceOccupant } from "../lib/types";
 import type { Voice } from "../lib/voice";
+import { userColor } from "../lib/scheme";
 
 const volumesKey = "irvc.peerVolumes";
 
@@ -88,7 +90,11 @@ export default function VoiceBar({
   return (
     <div className={cn("rounded-lg border border-line bg-raised p-2", className)}>
       <div className="flex items-center gap-2 px-1">
-        <Dot on={voice.status === "live"} />
+        {voice.channel.type === "dm" ? (
+          <Dot on={voice.status === "live"} />
+        ) : (
+          <Volume2 size={14} className={voice.status === "live" ? "text-accent" : "text-faint"} />
+        )}
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{voice.channel.name}</span>
         <span className="max-w-1/2 shrink-0 truncate text-xs text-faint">{status}</span>
       </div>
@@ -194,7 +200,9 @@ function PeerMenu({
       trigger={
         <button type="button" aria-label={`${name} volume`} className="row w-full py-1 text-sm">
           <Dot on={speaking} />
-          <span className="flex-1 truncate">{name}</span>
+          <span className="flex-1 truncate" style={{ color: userColor(name) }}>
+            {name}
+          </span>
         </button>
       }
     >

@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef } from "react";
 import { Heart, Laugh, MoreHorizontal, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "cn";
 import { IconButton, TextArea } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
+import { Time, dayKey, formatDay } from "../lib/time";
 import Markdown from "./Markdown";
+import { userColor } from "../lib/scheme";
 
 export const reactions: { key: Reaction; label: string; Icon: typeof ThumbsUp }[] = [
   { key: "+1", label: "+1", Icon: ThumbsUp },
@@ -21,9 +23,6 @@ export function isMentioned(body: string, username: string) {
 export function hasImage(body: string) {
   return /!\[[^\]]*\]\([^)]+\)/.test(body);
 }
-
-const clock = (ts: number) =>
-  new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export default function MessageList({
   messages,
@@ -93,33 +92,47 @@ export default function MessageList({
         {messages.map((m, i) => {
           const prev = messages[i - 1];
           const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;
+          const newDay = !prev || dayKey(prev.createdAt) !== dayKey(m.createdAt);
           const grouped =
             !action &&
+            !newDay &&
             prev !== undefined &&
             !prev.body.startsWith("/me ") &&
             prev.username === m.username &&
             m.createdAt - prev.createdAt < 300;
           return (
-            <Row
-              key={m.id}
-              message={m}
-              action={action}
-              grouped={grouped}
-              username={username}
-              mentioned={!action && isMentioned(m.body, username)}
-              active={activeId === m.id}
-              editing={editing?.id === m.id}
-              editBody={editing?.body ?? ""}
-              collapsed={collapsed.has(m.id)}
-              onSelect={() => onSelect(m)}
-              onToggleImages={() => onToggleImages(m.id)}
-              onEditBody={onEditBody}
-              onSaveEdit={onSaveEdit}
-              onCancelEdit={onCancelEdit}
-            />
+            <Fragment key={m.id}>
+              {newDay && <DaySeparator ts={m.createdAt} />}
+              <Row
+                message={m}
+                action={action}
+                grouped={grouped}
+                username={username}
+                mentioned={!action && isMentioned(m.body, username)}
+                active={activeId === m.id}
+                editing={editing?.id === m.id}
+                editBody={editing?.body ?? ""}
+                collapsed={collapsed.has(m.id)}
+                onSelect={() => onSelect(m)}
+                onToggleImages={() => onToggleImages(m.id)}
+                onEditBody={onEditBody}
+                onSaveEdit={onSaveEdit}
+                onCancelEdit={onCancelEdit}
+              />
+            </Fragment>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function DaySeparator({ ts }: { ts: number }) {
+  return (
+    <div role="separator" className="flex items-center gap-3 px-3 py-2 md:px-4">
+      <div className="h-px flex-1 bg-line" />
+      <span className="text-[0.7rem] text-fg">{formatDay(ts)}</span>
+      <div className="h-px flex-1 bg-line" />
     </div>
   );
 }
@@ -169,6 +182,7 @@ function Row({
     <IconButton
       label="message actions"
       size="sm"
+      data-actions-for={m.id}
       className={cn(
         "size-6 text-faint",
         active && "bg-raised text-fg",
@@ -186,9 +200,11 @@ function Row({
   if (action) {
     return (
       <div className="flex items-baseline gap-2 px-3 py-1 text-sm italic md:px-4">
-        <span className="not-italic text-accent">* {m.username}</span>
+        <span className="not-italic text-accent" style={{ color: userColor(m.username, "var(--accent)") }}>
+          * {m.username}
+        </span>
         <span className="min-w-0 flex-1">{action}</span>
-        <span className="text-[0.7rem] not-italic text-faint">{clock(m.createdAt)}</span>
+        <Time ts={m.createdAt} className="text-[0.7rem] not-italic text-faint" />
       </div>
     );
   }
@@ -212,14 +228,19 @@ function Row({
       <div className="min-w-0 flex-1">
         {!grouped && (
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium text-accent">{m.username}</span>
-            <time className="text-[0.7rem] text-faint">{clock(m.createdAt)}</time>
+            <span
+              className="text-sm font-medium text-accent"
+              style={{ color: userColor(m.username, "var(--accent)") }}
+            >
+              {m.username}
+            </span>
+            <Time ts={m.createdAt} className="text-[0.7rem] text-faint" />
             {!!m.editedAt && <span className="text-[0.7rem] text-faint">(edited)</span>}
             <span className="ml-auto -my-0.5">{menuButton(false)}</span>
           </div>
         )}
         {editing ? (
-          <div className="py-1">
+          <div className="py-1 pl-5 md:pl-8">
             <TextArea
               ref={textarea}
               rows={1}
@@ -243,13 +264,13 @@ function Row({
             </div>
           </div>
         ) : (
-          <div className="md">
+          <div className="md pl-5 md:pl-8">
             <Markdown text={m.body} collapsed={collapsed} onToggle={onToggleImages} />
           </div>
         )}
         {grouped && <span className="absolute top-0 right-2 md:right-3">{menuButton(true)}</span>}
         {chips.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-1">
+          <div className="flex flex-wrap gap-1 pt-1 pl-5 md:pl-8">
             {chips.map(([key, who]) => {
               const Icon = reactions.find((r) => r.key === key)!.Icon;
               return (

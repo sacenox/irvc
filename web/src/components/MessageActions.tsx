@@ -1,11 +1,15 @@
+import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Trash2, X } from "lucide-react";
 import { Button, IconButton } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { reactions } from "./MessageList";
 
-// MessageActions is the contextual bar for the selected message. It replaces
-// per-message hover toolbars: tap the ⋯ on any message and its actions appear
-// here, reachable on touch screens and by keyboard alike.
+// MessageActions is the contextual popover for the selected message: tap the ⋯
+// on any message (or the row) and the actions float beside it, reachable on
+// touch screens and by keyboard alike. It is portalled and positioned
+// absolutely, so opening it never reflows the message list; its right edge is
+// anchored to the message's ⋯ button.
 export default function MessageActions({
   message,
   own,
@@ -21,38 +25,72 @@ export default function MessageActions({
   onDelete: () => void;
   onClose: () => void;
 }) {
-  return (
-    <div className="shrink-0 px-2 pb-1 md:px-3">
-      <div className="flex items-center gap-1 rounded-lg border border-line bg-raised p-1.5 shadow-lg">
-        {reactions.map(({ key, label, Icon }) => (
-          <IconButton
-            key={key}
-            label={`react ${label}`}
-            size="sm"
-            className="size-9"
-            onClick={() => onReact(key)}
-          >
-            <Icon />
-          </IconButton>
-        ))}
-        <span className="mx-1 h-6 w-px bg-line" />
-        <span className="min-w-0 flex-1 truncate px-1 text-xs text-faint">
-          {message.username}: {message.body}
-        </span>
-        {own && (
-          <>
-            <Button size="sm" variant="ghost" onClick={onEdit}>
-              <Pencil /> edit
-            </Button>
-            <Button size="sm" variant="danger" onClick={onDelete}>
-              <Trash2 /> delete
-            </Button>
-          </>
-        )}
-        <IconButton label="close message actions" size="sm" onClick={onClose}>
-          <X />
+  const panel = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Track the ⋯ button through list scrolling, resizes and relayouts.
+  useLayoutEffect(() => {
+    const anchor = document.querySelector<HTMLElement>(`[data-actions-for="${message.id}"]`);
+    if (!anchor) return;
+    const place = () => {
+      const r = anchor.getBoundingClientRect();
+      const p = panel.current!.getBoundingClientRect();
+      let top = r.bottom + 4;
+      if (top + p.height > innerHeight - 8) top = Math.max(8, r.top - p.height - 4);
+      const left = Math.max(8, Math.min(r.right - p.width, innerWidth - p.width - 8));
+      setPos((prev) => (prev?.top === top && prev.left === left ? prev : { top, left }));
+    };
+    place();
+    addEventListener("scroll", place, true);
+    addEventListener("resize", place);
+    const ro = new ResizeObserver(place);
+    ro.observe(panel.current!);
+    return () => {
+      removeEventListener("scroll", place, true);
+      removeEventListener("resize", place);
+      ro.disconnect();
+    };
+  }, [message.id, own]);
+
+  return createPortal(
+    <div
+      ref={panel}
+      role="toolbar"
+      aria-label="message actions"
+      style={{
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        visibility: pos ? "visible" : "hidden",
+      }}
+      className="fixed z-40 flex w-max max-w-[calc(100vw-1rem)] flex-wrap items-center gap-1 rounded-lg border border-line bg-raised p-1.5 shadow-lg"
+    >
+      {reactions.map(({ key, label, Icon }) => (
+        <IconButton
+          key={key}
+          label={`react ${label}`}
+          size="sm"
+          className="size-9"
+          onClick={() => onReact(key)}
+        >
+          <Icon />
         </IconButton>
-      </div>
-    </div>
+      ))}
+      {own && (
+        <>
+          <span className="mx-1 h-6 w-px bg-line" />
+          <Button size="sm" variant="ghost" onClick={onEdit}>
+            <Pencil /> edit
+          </Button>
+          <Button size="sm" variant="danger" onClick={onDelete}>
+            <Trash2 /> delete
+          </Button>
+        </>
+      )}
+      <span className="mx-1 h-6 w-px bg-line" />
+      <IconButton label="close message actions" size="sm" onClick={onClose}>
+        <X />
+      </IconButton>
+    </div>,
+    document.body,
   );
 }

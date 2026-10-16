@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { SKITTLES, isDark, schemeColors, skittlesPalette, toPalette, type Scheme } from "./scheme";
 
 export type Mode = "light" | "dark";
 
@@ -43,6 +44,10 @@ export interface ThemePrefs {
   mode: Mode;
   preset: PresetId;
   overrides: Record<Mode, Partial<Record<Token, string>>>;
+  // Experimental: the terminal scheme the palette was seeded from (name, plus
+  // the colors it contributes to skittles), and per-username colors.
+  scheme: { name: string; colors: string[] } | null;
+  skittles: boolean;
 }
 
 const key = "irvc.theme";
@@ -51,6 +56,8 @@ export const defaultPrefs: ThemePrefs = {
   mode: "light",
   preset: "nicotine",
   overrides: { light: {}, dark: {} },
+  scheme: null,
+  skittles: false,
 };
 
 const systemMode = (): Mode =>
@@ -76,6 +83,8 @@ export function loadPrefs(): ThemePrefs {
     mode: p.mode === "dark" ? "dark" : "light",
     preset: presets.some((x) => x.id === p.preset) ? (p.preset as PresetId) : defaultPrefs.preset,
     overrides: { light: p.overrides?.light ?? {}, dark: p.overrides?.dark ?? {} },
+    scheme: p.scheme?.name && Array.isArray(p.scheme.colors) ? p.scheme : null,
+    skittles: p.skittles === true,
   };
 }
 
@@ -90,6 +99,15 @@ export function applyTheme(prefs: ThemePrefs) {
     const v = prefs.overrides[prefs.mode][t];
     if (v) el.style.setProperty(cssVar(t), v);
     else el.style.removeProperty(cssVar(t));
+  }
+  // Skittles: --user-N are only defined while it is on; userColor() falls back
+  // to the accent otherwise. Needs the resolved bg/fg, hence after the loop.
+  const colors = prefs.skittles
+    ? skittlesPalette(prefs.scheme?.colors, effective("bg"), effective("fg"), prefs.preset)
+    : [];
+  for (let i = 0; i < SKITTLES; i++) {
+    if (colors[i]) el.style.setProperty(`--user-${i}`, colors[i]);
+    else el.style.removeProperty(`--user-${i}`);
   }
 }
 
@@ -136,7 +154,7 @@ export function useTheme() {
   const setMode = useCallback((mode: Mode) => setPrefs((p) => ({ ...p, mode })), []);
   const setPreset = useCallback(
     (preset: PresetId) =>
-      setPrefs((p) => ({ ...p, preset, overrides: { light: {}, dark: {} } })),
+      setPrefs((p) => ({ ...p, preset, scheme: null, overrides: { light: {}, dark: {} } })),
     [],
   );
   const setToken = useCallback(
@@ -148,9 +166,25 @@ export function useTheme() {
     [],
   );
   const resetTokens = useCallback(
-    () => setPrefs((p) => ({ ...p, overrides: { ...p.overrides, [p.mode]: {} } })),
+    () => setPrefs((p) => ({ ...p, scheme: null, overrides: { ...p.overrides, [p.mode]: {} } })),
     [],
   );
+  // A scheme is dark or light by nature, so applying one switches to that mode
+  // and overrides every token there; the other mode keeps its palette.
+  const setScheme = useCallback(
+    (s: Scheme) =>
+      setPrefs((p) => {
+        const mode: Mode = isDark(s) ? "dark" : "light";
+        return {
+          ...p,
+          mode,
+          scheme: { name: s.n, colors: schemeColors(s) },
+          overrides: { ...p.overrides, [mode]: toPalette(s) },
+        };
+      }),
+    [],
+  );
+  const setSkittles = useCallback((skittles: boolean) => setPrefs((p) => ({ ...p, skittles })), []);
 
-  return { prefs, setMode, setPreset, setToken, resetTokens };
+  return { prefs, setMode, setPreset, setToken, resetTokens, setScheme, setSkittles };
 }

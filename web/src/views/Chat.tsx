@@ -29,6 +29,32 @@ function loadHiddenDms(): number[] {
   }
 }
 
+// Message ids whose images the user collapsed. Ids are global, so one flat set
+// works across channels; only the newest are kept so it can't grow forever.
+const collapsedKey = "irvc.collapsedImages";
+const collapsedMax = 2000;
+
+function loadCollapsed(): Set<number> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(collapsedKey) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+// The text channel or DM last opened, per user, so a reload lands back in it.
+// Voice is deliberately never restored: rejoining a call must be an explicit act.
+const lastChannelKey = (userId: number) => `irvc.lastChannel.${userId}`;
+
+function loadLastChannel(userId: number): number | null {
+  try {
+    const id = Number(localStorage.getItem(lastChannelKey(userId)));
+    return id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hiddenDms, setHiddenDms] = useState<number[]>(loadHiddenDms);
@@ -37,7 +63,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
   const [unread, setUnread] = useState<Record<number, number>>({});
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<number>>(loadCollapsed);
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
   const [active, setActive] = useState<Message | null>(null);
   const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
@@ -167,6 +193,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     localStorage.setItem(hiddenDmsKey, JSON.stringify(hiddenDms));
   }, [hiddenDms]);
 
+  useEffect(() => {
+    try {
+      const ids = [...collapsed].sort((a, b) => a - b).slice(-collapsedMax);
+      localStorage.setItem(collapsedKey, JSON.stringify(ids));
+    } catch {
+      // storage unavailable; collapse state just won't persist
+    }
+  }, [collapsed]);
+
   // Escape dismisses the message actions pane, same as its close button.
   useEffect(() => {
     if (!active) return;
@@ -184,6 +219,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   }, [selected]);
 
   useEffect(() => {
+    if (selected?.type !== "text" && selected?.type !== "dm") return;
+    try {
+      localStorage.setItem(lastChannelKey(user.id), String(selected.id));
+    } catch {
+      // storage unavailable; the last channel just won't be remembered
+    }
+  }, [selected, user.id]);
+
+  useEffect(() => {
     if (selected && !channels.some((c) => c.id === selected.id)) {
       setSelected(firstChannel(channels));
     }
@@ -196,7 +240,13 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setUnread(
           Object.fromEntries(cs.filter((c) => c.unread).map((c) => [c.id, c.unread as number])),
         );
-        setSelected((s) => s ?? firstChannel(cs));
+        const last = loadLastChannel(user.id);
+        const restored = cs.find(
+          (c) =>
+            c.id === last &&
+            (c.type === "text" || (c.type === "dm" && !loadHiddenDms().includes(c.id))),
+        );
+        setSelected((s) => s ?? restored ?? firstChannel(cs));
       })
       .catch(() => {});
     api<UserSummary[]>("/users")
@@ -473,7 +523,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 users={users}
                 onEditLast={startEditLast}
                 onCollapseImages={() =>
-                  setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)))
+                  setCollapsed(
+                    (prev) =>
+                      new Set([...prev, ...messages.filter((m) => hasImage(m.body)).map((m) => m.id)]),
+                  )
                 }
               />
             </div>
