@@ -3,6 +3,7 @@ import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as 
 import { cn } from "cn";
 import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
+import { firstChannel } from "../lib/channels";
 import { usePresence } from "../lib/presence";
 import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
@@ -184,7 +185,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   useEffect(() => {
     if (selected && !channels.some((c) => c.id === selected.id)) {
-      setSelected(channels.find((c) => c.type === "text") ?? channels[0] ?? null);
+      setSelected(firstChannel(channels));
     }
   }, [channels, selected]);
 
@@ -195,7 +196,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setUnread(
           Object.fromEntries(cs.filter((c) => c.unread).map((c) => [c.id, c.unread as number])),
         );
-        setSelected((s) => s ?? cs.find((c) => c.type === "text") ?? cs[0] ?? null);
+        setSelected((s) => s ?? firstChannel(cs));
       })
       .catch(() => {});
     api<UserSummary[]>("/users")
@@ -353,8 +354,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
           onSelectUser={selectUser}
           onCloseDM={(dm) => {
             setHiddenDms((ids) => (ids.includes(dm.id) ? ids : [...ids, dm.id]));
-            if (selected?.id === dm.id)
-              setSelected(channels.find((c) => c.type === "text") ?? null);
+            if (selected?.id === dm.id) setSelected(firstChannel(channels));
           }}
           onCreateChannel={createChannel}
           onDeleteChannel={deleteChannel}
@@ -446,7 +446,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             {inCall && <CallView voice={voice} className="flex-[3]" />}
             <div className={cn("flex min-h-0 flex-1 flex-col", inCall && "flex-[1] border-t border-line")}>
               <MessageList
-                channelId={selected.id}
+                key={selected.id}
                 messages={messages}
                 username={user.username}
                 collapsed={collapsed}

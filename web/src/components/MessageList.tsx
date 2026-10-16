@@ -26,7 +26,6 @@ const clock = (ts: number) =>
   new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export default function MessageList({
-  channelId,
   messages,
   username,
   collapsed,
@@ -38,7 +37,6 @@ export default function MessageList({
   onCancelEdit,
   onSaveEdit,
 }: {
-  channelId: number;
   messages: Message[];
   username: string;
   collapsed: Set<number>;
@@ -55,48 +53,42 @@ export default function MessageList({
   // The scrollTop we last set ourselves. Our scroll-to-bottom can queue a
   // scroll event that is handled only after a lazy image grows the list, so
   // the gap to the bottom reads large even though the reader never scrolled.
-  const pinnedTop = useRef<number | null>(null);
+  const pinned = useRef(0);
 
-  const scrollDown = () => {
+  const pin = () => {
     const el = list.current;
-    if (!el) return;
+    if (!el || !stick.current) return;
     el.scrollTop = el.scrollHeight;
-    pinnedTop.current = el.scrollTop;
+    pinned.current = el.scrollTop;
   };
 
-  // Jump to the newest message on channel switch, whatever the old position.
-  useLayoutEffect(() => {
-    stick.current = true;
-    scrollDown();
-  }, [channelId]);
+  // Follow new messages while the reader stays at the bottom. The channel is
+  // remounted on switch, so this also lands on the newest message.
+  useLayoutEffect(pin);
 
-  // Follow new messages only while the reader is pinned to the bottom.
-  useLayoutEffect(() => {
-    if (stick.current) scrollDown();
-  }, [messages]);
-
-  // Images grow after the effects above, so keep following the bottom while
-  // the content resizes — unless the reader has scrolled up.
   useEffect(() => {
     const el = list.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => stick.current && scrollDown());
+    // Images load after the effect above, so follow the bottom on resize too.
+    const ro = new ResizeObserver(pin);
     ro.observe(el.firstElementChild ?? el);
-    return () => ro.disconnect();
-  }, [channelId]);
-
-  function onScroll() {
-    const el = list.current;
-    if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48) stick.current = true;
-    // A scroll event still sitting where we pinned is ours, not a reader
-    // scrolling up, so leave stick alone.
-    else if (pinnedTop.current === null || Math.abs(el.scrollTop - pinnedTop.current) >= 1)
-      stick.current = false;
-  }
+    const onScroll = () => {
+      // A scroll still sitting where we pinned is ours, so leave stick alone.
+      if (el.scrollTop === pinned.current) return;
+      stick.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, []);
 
   return (
-    <div ref={list} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto py-2">
+    <div
+      ref={list}
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2 [scrollbar-gutter:stable]"
+    >
       <div>
         {messages.map((m, i) => {
           const prev = messages[i - 1];

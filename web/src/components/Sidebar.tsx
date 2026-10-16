@@ -15,6 +15,7 @@ import {
 import { cn } from "cn";
 import { IconButton, Menu, MenuItem, Dot, VoiceMarks } from "@/ui";
 import { api } from "../lib/api";
+import { byName } from "../lib/channels";
 import type { Channel, UserSummary, VoiceOccupant } from "../lib/types";
 import type { Voice } from "../lib/voice";
 import VoiceBar from "./VoiceBar";
@@ -40,8 +41,6 @@ interface Props {
   onOpenSettings: () => void;
   onLogout: () => void;
 }
-
-const byName = (a: Channel, b: Channel) => a.name.localeCompare(b.name);
 
 export default function Sidebar({
   channels,
