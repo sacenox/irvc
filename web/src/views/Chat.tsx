@@ -1,18 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import { AtSign, Hash, Menu, ScreenShare, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AtSign, Hash, Menu, MoreHorizontal, ScreenShare, Settings as SettingsIcon } from "lucide-react";
+import { cn } from "cn";
+import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
 import { usePresence } from "../lib/presence";
 import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
-import { useVoice } from "../lib/voice";
-import type { Channel, Message, User, UserSummary } from "../lib/types";
-import ChatPane from "../components/ChatPane";
+import { useVoice, type VoiceState } from "../lib/voice";
+import type { Channel, Message, Reaction, User, UserSummary, VoiceOccupant } from "../lib/types";
+import Composer from "../components/Composer";
+import MessageActions from "../components/MessageActions";
+import MessageList, { hasImage } from "../components/MessageList";
 import ScreenShareView from "../components/ScreenShare";
-import SettingsPanel from "../components/SettingsPanel";
 import Sidebar from "../components/Sidebar";
+import VoiceBar from "../components/VoiceBar";
+import SettingsView from "./Settings";
 
-const voiceMessage = (channelId: number) => JSON.stringify({ type: "voice", channelId });
+const voiceMessage = (state: VoiceState) => JSON.stringify({ type: "voice", ...state });
 const hiddenDmsKey = "irvc.hiddenDms";
 
 function loadHiddenDms(): number[] {
@@ -31,14 +35,30 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
   const [unread, setUnread] = useState<Record<number, number>>({});
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
+  const [active, setActive] = useState<Message | null>(null);
+  const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
+  const [view, setView] = useState<"channel" | "settings">("channel");
   const [openShare, setOpenShare] = useState<string | null>(null);
-  const desktop = useRef(window.matchMedia("(min-width: 768px)").matches);
+  const desktop = useRef(matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
-  const [voiceRooms, setVoiceRooms] = useState<Record<string, string[]>>({});
-  const voiceChannel = useRef(0);
+  // The server drops our voice state when the socket dies, so keep the last
+  // thing we told it and replay that on every (re)connect.
+  const voiceState = useRef<VoiceState>({ channelId: 0, muted: false, deafened: false });
   const { settings, update } = useSettings();
+
+  const markRead = useCallback((id: number) => {
+    setUnread((u) => {
+      if (!u[id]) return u;
+      const next = { ...u };
+      delete next[id];
+      return next;
+    });
+    api(`/channels/${id}/read`, { method: "POST" }).catch(() => {});
+  }, []);
+
   // Presence arrives as a snapshot on every connect, so a reconnect resyncs the
   // roster and voice occupancy. Replay our own voice channel on connect, since
   // the server drops occupancy when the socket dies.
@@ -62,39 +82,39 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
             }
             return cs;
           });
-          if (ev.message.channelId === selectedId.current) {
-            markRead(ev.message.channelId);
-          } else if (ev.message.username !== user.username) {
-            setUnread((u) => ({ ...u, [ev.message!.channelId]: (u[ev.message!.channelId] ?? 0) + 1 }));
-          }
+          if (ev.message.channelId === selectedId.current) markRead(ev.message.channelId);
+          else if (ev.message.username !== user.username)
+            setUnread((u) => ({
+              ...u,
+              [ev.message!.channelId]: (u[ev.message!.channelId] ?? 0) + 1,
+            }));
         }
         if (ev.message.channelId === selectedId.current) {
-          if (ev.type === "message") {
-            setMessages((prev) => [...prev, ev.message!]);
-          } else if (ev.type === "message_edit") {
+          if (ev.type === "message") setMessages((prev) => [...prev, ev.message!]);
+          else if (ev.type === "message_edit")
             setMessages((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
-          } else if (ev.type === "message_delete") {
+          else if (ev.type === "message_delete")
             setMessages((prev) => prev.filter((m) => m.id !== ev.message!.id));
-          }
         }
       }
     },
-    () => send(voiceMessage(voiceChannel.current)),
+    () => send(voiceMessage(voiceState.current)),
   );
-  const voice = useVoice(settings, (channelId) => {
-    voiceChannel.current = channelId ?? 0;
-    send(voiceMessage(voiceChannel.current));
+
+  const voice = useVoice(settings, (state) => {
+    voiceState.current = state;
+    send(voiceMessage(state));
   });
-  const { mode, toggleMode, theme, setTheme } = useTheme();
+  const theme = useTheme();
+
   // The watched share lives in the LiveKit room, so it vanishes when the sharer
-  // stops; the pane then falls back to the selected text channel.
+  // stops; the pane then falls back to the selected channel.
   const share = voice.shares.find((s) => s.id === openShare) ?? null;
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
 
   useEffect(() => {
-    document.documentElement.style.fontSize = { default: "", normal: "16px", large: "18px" }[
-      settings.fontSize
-    ];
-  }, [settings.fontSize]);
+    document.title = totalUnread > 0 ? `(${totalUnread}) irvc` : "irvc";
+  }, [totalUnread]);
 
   useEffect(() => {
     localStorage.setItem(hiddenDmsKey, JSON.stringify(hiddenDms));
@@ -102,6 +122,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   useEffect(() => {
     selectedId.current = selected?.id ?? null;
+    setEditing(null);
+    setActive(null);
   }, [selected]);
 
   useEffect(() => {
@@ -117,7 +139,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         setUnread(
           Object.fromEntries(cs.filter((c) => c.unread).map((c) => [c.id, c.unread as number])),
         );
-        setSelected(cs.find((c) => c.type === "text") ?? cs[0] ?? null);
+        setSelected((s) => s ?? cs.find((c) => c.type === "text") ?? cs[0] ?? null);
       })
       .catch(() => {});
     api<UserSummary[]>("/users")
@@ -135,25 +157,24 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       .catch(() => {});
   }, [selected]);
 
-  // Opening a channel clears its unread badge and tells the server, so the
-  // count stays right on the next cold start and on the user's other devices.
+  // Opening a channel clears its badge and tells the server, so the count stays
+  // right on the next cold start and on the user's other devices.
   useEffect(() => {
     if (selected && (selected.type === "text" || selected.type === "dm")) markRead(selected.id);
-  }, [selected]);
+  }, [selected, markRead]);
 
-  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
-  useEffect(() => {
-    document.title = totalUnread > 0 ? `(${totalUnread}) irvc` : "irvc";
-  }, [totalUnread]);
+  // Opening a share also leaves the settings pane, so the stream is visible
+  // straight away no matter where the click came from.
+  function showShare(id: string) {
+    setOpenShare(id);
+    setView("channel");
+  }
 
-  function markRead(id: number) {
-    setUnread((u) => {
-      if (!u[id]) return u;
-      const next = { ...u };
-      delete next[id];
-      return next;
-    });
-    api(`/channels/${id}/read`, { method: "POST" }).catch(() => {});
+  function open(c: Channel) {
+    setSelected(c);
+    setView("channel");
+    setOpenShare(null);
+    if (!desktop.current) setSidebarOpen(false);
   }
 
   async function selectUser(u: UserSummary) {
@@ -161,35 +182,69 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       const dm = await api<Channel>(`/dms/${u.id}`, { method: "POST" });
       setChannels((cs) => (cs.some((c) => c.id === dm.id) ? cs : [...cs, dm]));
       setHiddenDms((ids) => ids.filter((id) => id !== dm.id));
-      selectChannel(dm);
+      open(dm);
     } catch {
-      // ignore
+      // a DM that will not open is not worth an error state
     }
   }
 
-  function closeDM(dm: Channel) {
-    setHiddenDms((ids) => (ids.includes(dm.id) ? ids : [...ids, dm.id]));
-    if (selected?.id === dm.id) {
-      setSelected(channels.find((c) => c.type === "text") ?? null);
+  async function createChannel(type: "text" | "voice", name: string) {
+    try {
+      const channel = await api<Channel>("/channels", {
+        method: "POST",
+        body: JSON.stringify({ type, name }),
+      });
+      setChannels((cs) => (cs.some((c) => c.id === channel.id) ? cs : [...cs, channel]));
+    } catch {
+      // A rejected name keeps the sidebar form open; nothing else to do.
     }
   }
 
-  function selectChannel(c: Channel) {
-    setSelected(c);
-    setOpenShare(null);
-    setSettingsOpen(false);
-    if (!desktop.current) setSidebarOpen(false);
+  async function deleteChannel(c: Channel) {
+    if (c.type === "text" && !confirm(`Delete #${c.name} and all its messages?`)) return;
+    await api(`/channels/${c.id}`, { method: "DELETE" }).catch(() => {});
   }
 
-  function selectShare(id: string) {
-    setOpenShare(id);
-    setSettingsOpen(false);
-    if (!desktop.current) setSidebarOpen(false);
+  function react(m: Message, reaction: Reaction) {
+    api(`/messages/${m.id}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
+    }).catch(() => {});
   }
 
-  function toggleSettings() {
-    setSettingsOpen((v) => !v);
-    if (!desktop.current) setSidebarOpen(false);
+  function startEdit(m: Message) {
+    setEditing({ id: m.id, body: m.body });
+    setActive(null);
+  }
+
+  function startEditLast() {
+    const last = [...messages].reverse().find((m) => m.username === user.username);
+    if (last) setEditing({ id: last.id, body: last.body });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const { id } = editing;
+    const body = editing.body.trim();
+    setEditing(null);
+    if (!body || body === messages.find((m) => m.id === id)?.body) return;
+    await api(`/messages/${id}`, { method: "PATCH", body: JSON.stringify({ body }) }).catch(
+      () => {},
+    );
+  }
+
+  function deleteMessage(m: Message) {
+    setActive(null);
+    api(`/messages/${m.id}`, { method: "DELETE" }).catch(() => {});
+  }
+
+  function toggleImages(id: number) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   async function logout() {
@@ -197,82 +252,169 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     onLogout();
   }
 
+  const chat = selected?.type === "text" || selected?.type === "dm";
+  const showingShare = view === "channel" && share !== null;
+
   return (
-    <div className="relative flex h-full">
+    <div className="flex h-dvh overflow-hidden">
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-10 bg-black/30 md:hidden"
+          className="fixed inset-0 z-30 bg-scrim md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
-      {sidebarOpen && (
+      <div
+        inert={!sidebarOpen}
+        className={cn(
+          "z-40 w-64 shrink-0 transition-transform duration-200",
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[80vw] max-md:max-w-72",
+          !sidebarOpen && "max-md:-translate-x-full",
+        )}
+      >
         <Sidebar
           channels={channels.filter((c) => c.type !== "dm" || !hiddenDms.includes(c.id))}
           unread={unread}
           selected={selected}
-          onSelect={selectChannel}
-          onCloseDM={closeDM}
-          onSelectUser={selectUser}
-          voice={voice}
-          voiceRooms={voiceRooms}
-          openShare={openShare}
-          onOpenShare={selectShare}
-          username={user.username}
           users={users}
           online={online}
-          mode={mode}
-          onToggleMode={toggleMode}
-          settingsOpen={settingsOpen}
-          onToggleSettings={toggleSettings}
+          username={user.username}
+          voice={voice}
+          voiceRooms={voiceRooms}
+          deafened={settings.deafened}
+          onDeafen={(v) => update({ deafened: v })}
+          openShare={openShare}
+          onOpenShare={showShare}
+          onSelect={open}
+          onSelectUser={selectUser}
+          onCloseDM={(dm) => {
+            setHiddenDms((ids) => (ids.includes(dm.id) ? ids : [...ids, dm.id]));
+            if (selected?.id === dm.id)
+              setSelected(channels.find((c) => c.type === "text") ?? null);
+          }}
+          onCreateChannel={createChannel}
+          onDeleteChannel={deleteChannel}
+          onOpenSettings={() => {
+            setView("settings");
+            if (!desktop.current) setSidebarOpen(false);
+          }}
           onLogout={logout}
         />
-      )}
+      </div>
+
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-1 border-b border-sepia/15 px-2 py-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
+        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-2 md:px-3">
+          <IconButton
+            label={sidebarOpen ? "close navigation" : "open navigation"}
+            className="md:hidden"
             onClick={() => setSidebarOpen((v) => !v)}
-            title="toggle sidebar"
           >
             <Menu />
-          </Button>
-          <span className="flex items-center gap-1.5 text-sm text-sepia/70">
-            {settingsOpen ? (
-              <>
-                <Settings size={14} />
-                Settings
-              </>
-            ) : share ? (
-              <>
-                <ScreenShare size={14} />
+          </IconButton>
+          {view === "settings" ? (
+            <>
+              <SettingsIcon size={16} className="text-faint" />
+              <span className="truncate text-sm font-medium">settings</span>
+            </>
+           ) : showingShare && share ? (
+            <>
+              <ScreenShare size={16} className="text-faint" />
+              <span className="truncate text-sm font-medium">
                 {share.self ? "your screen" : `${share.name}'s screen`}
-              </>
-            ) : (
-              <>
-                {selected && (selected.type === "dm" ? <AtSign size={14} /> : <Hash size={14} />)}
-                {selected?.name}
-              </>
-            )}
-          </span>
-          {!connected && (
-            // Presence is stale until the socket is back, so say so instead of
-            // showing a silently wrong roster.
-            <span className="ml-auto text-xs text-sepia/50">reconnecting…</span>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setOpenShare(null)}
+              >
+                close
+              </Button>
+            </>
+          ) : (
+            <>
+              {selected &&
+                (selected.type === "dm" ? (
+                  <AtSign size={16} className="text-faint" />
+                ) : (
+                  <Hash size={16} className="text-faint" />
+                ))}
+              <span className="truncate text-sm font-medium">{selected?.name}</span>
+              {selected?.type === "text" && !selected.permanent && (
+                <MenuPrimitive
+                  className="ml-auto"
+                  trigger={
+                    <IconButton label="channel actions" size="sm">
+                      <MoreHorizontal />
+                    </IconButton>
+                  }
+                >
+                  {(close) => (
+                    <MenuItem danger onClick={() => (close(), deleteChannel(selected))}>
+                      delete channel
+                    </MenuItem>
+                  )}
+                </MenuPrimitive>
+              )}
+            </>
           )}
+          {!connected && <span className="ml-auto pr-1 text-xs text-faint">reconnecting…</span>}
         </header>
-        {settingsOpen ? (
-          <SettingsPanel
-            settings={settings}
-            update={update}
-            voice={voice}
-            theme={theme}
-            onThemeChange={setTheme}
-          />
-        ) : share ? (
+
+        {view === "settings" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SettingsView settings={settings} update={update} voice={voice} theme={theme} />
+          </div>
+         ) : showingShare && share ? (
           <ScreenShareView track={share.track} />
+        ) : chat && selected ? (
+          <>
+            <MessageList
+              channelId={selected.id}
+              messages={messages}
+              username={user.username}
+              collapsed={collapsed}
+              editing={editing}
+              activeId={active?.id ?? null}
+              onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
+              onToggleImages={toggleImages}
+              onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
+              onCancelEdit={() => setEditing(null)}
+              onSaveEdit={saveEdit}
+            />
+            {active && !editing && (
+              <MessageActions
+                message={active}
+                own={active.username === user.username}
+                onReact={(r) => react(active, r)}
+                onEdit={() => startEdit(active)}
+                onDelete={() => deleteMessage(active)}
+                onClose={() => setActive(null)}
+              />
+            )}
+            <Composer
+              channel={selected}
+              users={users}
+              onEditLast={startEditLast}
+              onCollapseImages={() =>
+                setCollapsed(new Set(messages.filter((m) => hasImage(m.body)).map((m) => m.id)))
+              }
+            />
+          </>
         ) : (
-          <ChatPane channel={selected} messages={messages} users={users} username={user.username} />
+          <Centered>select a channel</Centered>
+        )}
+
+        {voice.channel && (
+          <div className="shrink-0 px-2 pb-2 md:hidden">
+            <VoiceBar
+              voice={voice}
+              deafened={settings.deafened}
+              onDeafen={(v) => update({ deafened: v })}
+              openShare={openShare}
+              onOpenShare={showShare}
+              occupants={voiceRooms[String(voice.channel.id)] ?? []}
+            />
+          </div>
         )}
       </main>
     </div>

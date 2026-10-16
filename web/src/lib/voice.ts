@@ -238,6 +238,15 @@ function micSignature(s: Settings): string {
 
 export type VoiceStatus = "idle" | "connecting" | "live" | "error";
 
+// VoiceState is what we tell the server about our own call: which channel we
+// are in (0 for none) and whether we can hear or be heard. It drives the mute
+// and deafen markers everyone else sees in their roster.
+export interface VoiceState {
+  channelId: number;
+  muted: boolean;
+  deafened: boolean;
+}
+
 export interface Voice {
   channel: Channel | null;
   status: VoiceStatus;
@@ -259,7 +268,7 @@ export interface Voice {
 // switching panes. Chat holds it and passes it to the sidebar controls.
 // Voice settings are read from a ref so `join` always uses the latest values,
 // while live changes (device, processing, quality) are applied via effects.
-export function useVoice(settings: Settings, onVoice?: (channelID: number | null) => void): Voice {
+export function useVoice(settings: Settings, onVoice?: (state: VoiceState) => void): Voice {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState("");
@@ -301,7 +310,6 @@ export function useVoice(settings: Settings, onVoice?: (channelID: number | null
     setSpeaking([]);
     setShares([]);
     setMuted(false);
-    onVoiceRef.current?.(null);
   }, []);
 
   const join = useCallback(
@@ -374,7 +382,6 @@ export function useVoice(settings: Settings, onVoice?: (channelID: number | null
         }
         appliedRef.current = micSignature(s);
         setStatus("live");
-        onVoiceRef.current?.(c.id);
         sync();
       } catch (err) {
         if (gen !== genRef.current) return;
@@ -405,6 +412,16 @@ export function useVoice(settings: Settings, onVoice?: (channelID: number | null
       if (mutedRef.current) await p?.mute();
     })().catch((err) => setError((err as Error).message));
   }, [settings, status, gate]);
+
+  // Report our own call state whenever any of it changes: joining, leaving,
+  // muting, deafening. The server rebroadcasts it as presence.
+  useEffect(() => {
+    onVoiceRef.current?.({
+      channelId: channel?.id ?? 0,
+      muted,
+      deafened: settings.deafened,
+    });
+  }, [channel, muted, settings.deafened]);
 
   // Speaker changes route through setSinkId on browsers that support it.
   useEffect(() => {

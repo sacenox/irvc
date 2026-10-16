@@ -79,19 +79,37 @@ read_state (user_id, channel_id, last_read_message_id, updated_at)
 - **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide. Gifs from Giphy can also be inserted with the gif picker.
 - **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.
 - **Screen share:** any participant may publish a screen share (with tab or system audio) into the room. It is not persisted and not recorded. Shares are visible only to participants, not to the rest of the server. Share audio plays through the normal audio path, so deafen and per-peer volume apply.
-- **Voice controls:** mute, deafen (local only), per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone, start/stop screen share.
-- **Presence:** a user is online while their WS connection is up; otherwise offline. Voice occupancy rides along with presence. No invisible mode.
-- **Settings:** themes, font size, and voice preferences are client-side (device-local). Voice occupancy is server-side only.
+- **Voice controls:** mute, deafen, per-peer volume, mic/speaker device, quality preset, echo cancellation, noise suppression, auto gain, voice isolation, level-based noise gate, join/leave tone, start/stop screen share. Deafen still only silences incoming audio locally; its state is shared, nothing else.
+- **Presence:** a user is online while their WS connection is up; otherwise offline. Voice occupancy rides along with presence, and so does each occupant's mute/deafen state, so everyone sees who cannot hear or be heard without joining the call. A user with several connections counts as muted or deafened only when all of them are. No invisible mode.
+- **Settings:** colors, font size, and voice preferences are client-side (device-local). Voice occupancy is server-side only.
 
 ## Frontend
 
-- React, modern. oxlint + oxfmt. Tailwind + Shadcn. LiveKit client.
-- Two themes (`80s-nicotine` sepia default, `tuxedo` grayscale) × light/dark, applied before first paint. Monospace, minimalist, functional.
+- React, modern. oxlint + oxfmt. Tailwind, LiveKit client. Mobile-first: the layout is built for narrow screens and widens from there.
+- **Style system.** One set of semantic tokens (`src/index.css`) names every role the UI
+  uses: background, sidebar, panels, text, muted, faint, borders, accent, accent text,
+  danger. Palettes set those variables; user overrides replace them; components only ever
+  reference the roles. The shared vocabulary on top (`src/ui`) is buttons, inputs, fields,
+  toggles, menus and lists — feature code composes those instead of inventing new Tailwind
+  recipes, so the UI stays consistent by construction.
+- **Theming.** `80s-nicotine` (sepia, default) and `tuxedo` (grayscale) are presets of those
+  colors, not fixed themes: any color can be overridden per light/dark mode from the
+  settings pane and is stored with the rest of the preferences. Mode, preset and overrides
+  are applied before first paint.
+- **No hover-only interactions.** Anything interactive is visible and reachable by tap and
+  keyboard: per-message actions open from an always-present `⋯`, channel actions from a
+  `⋯` menu, and the selected message's actions appear in a contextual bar above the
+  composer. Hover only ever adds a colour change.
 - Layout:
-  - Left sidebar: text channels, voice channels (with occupants), DMs, then users (online/offline). Collapsible; overlays on mobile.
+  - Left sidebar: text channels, voice channels (with occupants), DMs, then users
+    (online/offline). Fixed on desktop, a drawer with a scrim on mobile.
   - Focus pane: chat for the selected text channel or DM, the settings pane, or a screen share.
-  - Header: sidebar toggle, current channel, settings, or the screen share being watched.
-- Settings pane: theme, font size, sounds, deafen, voice-activation meter/threshold, devices, quality (audio and screen share), mic processing.
+  - Header: sidebar toggle (mobile), current channel, channel actions.
+  - Voice bar: whenever you are in a call — docked in the sidebar on desktop, at the bottom
+    of the screen on mobile — with mute, deafen, screen share, leave, participants and
+    per-peer volume (from the participant's own menu).
+- Settings pane: mode, palette, per-role colours, text size, sounds, voice-activation
+  meter/threshold, devices, quality (audio and screen share), mic processing.
 
 ## Config
 

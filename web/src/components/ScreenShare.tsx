@@ -17,7 +17,7 @@ export default function ScreenShareView({ track }: { track: Track }) {
   }, [track]);
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-black p-2">
+    <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
       <video
         ref={ref}
         autoPlay

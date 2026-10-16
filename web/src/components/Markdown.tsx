@@ -14,7 +14,7 @@ function Image({ src, alt }: { src?: string; alt?: string }) {
   if (!src) return alt ? <span>{alt}</span> : null;
   if (collapsed)
     return (
-      <span className="my-1 inline-block rounded border border-sepia/15 bg-sepia/5 px-2 py-0.5 text-xs text-sepia/60">
+      <span className="my-1 inline-block rounded-md border border-line bg-surface px-2 py-0.5 text-xs text-muted">
         {alt || "image"}
       </span>
     );
@@ -25,11 +25,11 @@ function Image({ src, alt }: { src?: string; alt?: string }) {
         alt={alt ?? ""}
         loading="lazy"
         onClick={() => setOpen(true)}
-        className="my-1 max-h-80 max-w-full cursor-zoom-in rounded border border-sepia/15"
+        className="cursor-zoom-in"
       />
       {open && (
         <div
-          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-scrim p-4"
           onClick={() => setOpen(false)}
         >
           <img src={src} alt={alt ?? ""} className="max-h-full max-w-full rounded" />
@@ -84,7 +84,7 @@ export default function Markdown({
           type="button"
           onClick={onToggle}
           title={collapsed ? "show images" : "hide images"}
-          className="flex w-full items-center gap-1 text-xs leading-6 text-sepia/50 hover:text-sepia/80"
+          className="flex w-full items-center gap-1 text-xs leading-6 text-faint hover:text-muted"
         >
           {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
           {count} image{count > 1 ? "s" : ""}
