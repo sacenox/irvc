@@ -182,6 +182,7 @@ function Row({
     <IconButton
       label="message actions"
       size="sm"
+      data-actions-for={m.id}
       className={cn(
         "size-6 text-faint",
         active && "bg-raised text-fg",
