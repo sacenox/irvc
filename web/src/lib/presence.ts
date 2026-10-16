@@ -85,12 +85,19 @@ export function usePresence(onEvent: (ev: WSEvent) => void, onOpen: () => void) 
       }
     }, PING);
 
+    // wake runs when the tab becomes visible again or the network returns. A
+    // healthy socket only gets a liveness probe; tearing it down would force a
+    // reconnect (and a roster resync) for no reason. A socket that is not OPEN
+    // is dropped, and an OPEN one is dropped by the heartbeat if the probe goes
+    // unanswered.
     const wake = () => {
       if (closed) return;
       window.clearTimeout(reconnecting);
       retry = 0;
-      if (socket.current) drop();
-      else open();
+      const ws = socket.current;
+      if (!ws) return open();
+      if (ws.readyState === WebSocket.OPEN) return ws.send('{"type":"ping"}');
+      drop();
     };
 
     const onVisibility = () => {
