@@ -7,6 +7,7 @@ import { firstChannel } from "../lib/channels";
 import { usePresence } from "../lib/presence";
 import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
+import { toast } from "../lib/toast";
 import { beep, useVoice, type VoiceState } from "../lib/voice";
 import type { Channel, Message, Reaction, User, UserSummary, VoiceOccupant } from "../lib/types";
 import CallView from "../components/CallView";
@@ -344,7 +345,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     setEditing(null);
     if (!body || body === messages.find((m) => m.id === id)?.body) return;
     await api(`/messages/${id}`, { method: "PATCH", body: JSON.stringify({ body }) }).catch(
-      () => {},
+      (e: Error) => toast(e.message),
     );
   }
 

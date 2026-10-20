@@ -25,7 +25,7 @@ const (
 	argonThreads  = 4
 	argonKeyLen   = 32
 	minPassword   = 8
-	maxMessageLen = 4000
+	maxMessageLen = 40000
 )
 
 func randToken() string {

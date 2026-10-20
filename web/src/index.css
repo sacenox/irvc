@@ -203,6 +203,12 @@
     @apply my-1 h-px bg-line;
   }
 
+  /* transient errors, driven by src/lib/toast.ts */
+  .toast {
+    @apply max-w-[min(28rem,100%)] rounded-md border border-danger/40 bg-raised px-3 py-1.5 text-xs break-words text-danger shadow-lg;
+    animation: toast 5s ease-out forwards;
+  }
+
   /* sidebar rows */
   .row {
     @apply flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-raised hover:text-fg;
@@ -297,5 +303,21 @@
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Fade in, hold, fade out, so a toast is gone before toast.ts drops it at 5s. */
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  3%,
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
   }
 }

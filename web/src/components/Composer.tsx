@@ -10,6 +10,7 @@ import { ImagePlus, SendHorizontal, Smile, X } from "lucide-react";
 import { cn } from "cn";
 import { Button, IconButton } from "@/ui";
 import { api, gifs, upload } from "../lib/api";
+import { toast } from "../lib/toast";
 import type { Channel, Gif, UserSummary } from "../lib/types";
 
 const maxInputHeight = 200;
@@ -115,8 +116,9 @@ export default function Composer({
         method: "POST",
         body: JSON.stringify({ body: text }),
       });
-    } catch {
+    } catch (e) {
       setBody(text);
+      toast(e instanceof Error ? e.message : "could not send message");
     }
   }
 

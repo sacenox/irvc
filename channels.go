@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -402,6 +403,22 @@ type sendMessageRequest struct {
 	Body string `json:"body"`
 }
 
+// checkBody rejects empty bodies and ones over the size cap, replying with the
+// reason. The composer has no copy of the cap, so the toast shows this message.
+func checkBody(c *gin.Context, body string) bool {
+	if body == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message"})
+		return false
+	}
+	if n := utf8.RuneCountInString(body); n > maxMessageLen {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error": fmt.Sprintf("message is too long: %d of %d characters", n, maxMessageLen),
+		})
+		return false
+	}
+	return true
+}
+
 func (s *Server) handleSendMessage(c *gin.Context) {
 	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -414,8 +431,7 @@ func (s *Server) handleSendMessage(c *gin.Context) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
-	if body == "" || len(body) > maxMessageLen {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message"})
+	if !checkBody(c, body) {
 		return
 	}
 	user := c.MustGet("user").(User)
@@ -450,8 +466,7 @@ func (s *Server) handleEditMessage(c *gin.Context) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
-	if body == "" || len(body) > maxMessageLen {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message"})
+	if !checkBody(c, body) {
 		return
 	}
 	user := c.MustGet("user").(User)
