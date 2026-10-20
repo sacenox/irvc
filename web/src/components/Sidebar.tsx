@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   Plus,
   Settings as SettingsIcon,
+  Trash2,
   UserPlus,
   Volume2,
 } from "lucide-react";
@@ -92,7 +93,7 @@ export default function Sidebar({
                   ? undefined
                   : (close) => (
                       <MenuItem onClick={() => (close(), onDeleteChannel(c))} danger>
-                        delete channel
+                        <Trash2 size={14} /> delete channel
                       </MenuItem>
                     )
               }
@@ -229,6 +230,7 @@ function ChannelRow({
   icon,
   name,
   badge,
+  hint,
   active,
   onSelect,
   actions,
@@ -236,6 +238,7 @@ function ChannelRow({
   icon: ReactNode;
   name: string;
   badge?: number;
+  hint?: string;
   active: boolean;
   onSelect: () => void;
   actions?: (close: () => void) => ReactNode;
@@ -260,6 +263,7 @@ function ChannelRow({
         <span className="text-faint">{icon}</span>
         <span className="flex-1 truncate">{name}</span>
         {!!badge && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
+        {hint && <span className="text-xs text-faint">{hint}</span>}
       </button>
       {actions && <Menu trigger={<MoreButton />}>{actions}</Menu>}
     </div>
@@ -304,28 +308,22 @@ function VoiceRow({
     );
   return (
     <div>
-      <div className="flex items-center gap-0.5">
-        <button
-          type="button"
-          onClick={() => voice.join(channel)}
-          className="row flex-1"
-        >
-          <span className="text-faint">
-            <Volume2 size={14} />
-          </span>
-          <span className="flex-1 truncate">{channel.name}</span>
-          <span className="text-xs text-faint">join</span>
-        </button>
-        {!channel.permanent && occupants.length === 0 && (
-          <Menu trigger={<MoreButton />}>
-            {(close) => (
-              <MenuItem onClick={() => (close(), onDelete())} danger>
-                delete channel
-              </MenuItem>
-            )}
-          </Menu>
-        )}
-      </div>
+      <ChannelRow
+        icon={<Volume2 size={14} />}
+        name={channel.name}
+        hint="join"
+        active={false}
+        onSelect={() => voice.join(channel)}
+        actions={
+          !channel.permanent && occupants.length === 0
+            ? (close) => (
+                <MenuItem onClick={() => (close(), onDelete())} danger>
+                  <Trash2 size={14} /> delete channel
+                </MenuItem>
+              )
+            : undefined
+        }
+      />
       {occupants.length > 0 && (
         <ul className="space-y-0.5 pb-1 pl-7">
           {occupants.map((o) => (

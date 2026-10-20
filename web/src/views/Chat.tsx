@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Video } from "lucide-react";
+import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Trash2, Video } from "lucide-react";
 import { cn } from "cn";
 import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
@@ -478,7 +478,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 >
                   {(close) => (
                     <MenuItem danger onClick={() => (close(), deleteChannel(selected))}>
-                      delete channel
+                      <Trash2 size={14} /> delete channel
                     </MenuItem>
                   )}
                 </MenuPrimitive>
