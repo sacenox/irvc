@@ -140,6 +140,17 @@ export default function SettingsView({
           checked={settings.typingIndicator}
           onChange={(v) => update({ typingIndicator: v })}
         />
+        <Toggle
+          label="hide previews"
+          checked={settings.hidePreviews}
+          onChange={(v) => update({ hidePreviews: v })}
+        />
+        <Toggle
+          label="collapse previews by default"
+          checked={settings.collapsePreviews}
+          disabled={settings.hidePreviews}
+          onChange={(v) => update({ collapsePreviews: v })}
+        />
       </Section>
 
       <Section label="Sounds">

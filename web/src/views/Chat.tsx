@@ -70,6 +70,20 @@ function typingLabel(names: string[]) {
   return "several people are typing…";
 }
 
+// Per-message preview state the user chose by hand (true = collapsed). Anything
+// absent follows the "collapse previews by default" setting, so flipping that
+// setting never fights an explicit choice. Only the newest entries are kept.
+const previewKey = "irvc.previewCollapsed";
+const previewMax = 2000;
+
+function loadPreviewState(): Record<number, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(previewKey) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hiddenDms, setHiddenDms] = useState<number[]>(loadHiddenDms);
@@ -79,6 +93,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [messages, setMessages] = useState<Message[]>([]);
   const [unread, setUnread] = useState<Record<number, number>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(loadCollapsed);
+  const [previewState, setPreviewState] = useState<Record<number, boolean>>(loadPreviewState);
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
   const [active, setActive] = useState<Message | null>(null);
   const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
@@ -413,9 +428,45 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     );
   }
 
+  // Removing a preview removes it for everyone; the server pushes the updated
+  // message to all clients, so only failures need handling here.
+  function removePreview(m: Message) {
+    setActive(null);
+    api<Message>(`/messages/${m.id}/preview`, { method: "DELETE" }).catch((e) =>
+      toast(e instanceof Error ? e.message : "could not remove preview"),
+    );
+  }
+
+  // /collapse: fold every image and link preview in the open channel.
+  function collapseAll() {
+    setCollapsed(
+      (prev) => new Set([...prev, ...messages.filter((m) => hasImage(m.body)).map((m) => m.id)]),
+    );
+    const cards = messages.filter((m) => m.preview?.kind === "card").map((m) => [m.id, true]);
+    setPreviewState((prev) => ({ ...prev, ...Object.fromEntries(cards) }));
+  }
+
   function deleteMessage(m: Message) {
     setActive(null);
     api(`/messages/${m.id}`, { method: "DELETE" }).catch(() => {});
+  }
+
+  useEffect(() => {
+    try {
+      const keep = Object.keys(previewState)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .slice(-previewMax);
+      localStorage.setItem(previewKey, JSON.stringify(Object.fromEntries(keep.map((k) => [k, previewState[k]]))));
+    } catch {
+      // storage unavailable; choices just won't persist
+    }
+  }, [previewState]);
+
+  const previewCollapsed = (id: number) => previewState[id] ?? settings.collapsePreviews;
+
+  function togglePreview(id: number) {
+    setPreviewState((prev) => ({ ...prev, [id]: !(prev[id] ?? settings.collapsePreviews) }));
   }
 
   function toggleImages(id: number) {
@@ -567,6 +618,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 messages={messages}
                 username={user.username}
                 collapsed={collapsed}
+                previewCollapsed={previewCollapsed}
+                hidePreviews={settings.hidePreviews}
+                onTogglePreview={togglePreview}
+                onRemovePreview={removePreview}
                 editing={editing}
                 activeId={active?.id ?? null}
                 onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
@@ -586,6 +641,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                   onReact={(r) => react(active, r)}
                   onEdit={() => startEdit(active)}
                   onDelete={() => deleteMessage(active)}
+                  onRemovePreview={() => removePreview(active)}
                   onClose={() => setActive(null)}
                 />
               )}
@@ -594,12 +650,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 users={users}
                 onEditLast={startEditLast}
                 onTyping={sendTyping}
-                onCollapseImages={() =>
-                  setCollapsed(
-                    (prev) =>
-                      new Set([...prev, ...messages.filter((m) => hasImage(m.body)).map((m) => m.id)]),
-                  )
-                }
+                onCollapse={collapseAll}
               />
             </div>
           </>

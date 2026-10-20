@@ -20,6 +20,15 @@ export interface Channel {
 
 export type Reaction = "+1" | "-1" | "heart" | "laugh";
 
+export interface Preview {
+  url: string;
+  kind: "card" | "image" | "other" | "none";
+  title?: string;
+  description?: string;
+  image?: string;
+  site?: string;
+}
+
 export interface Message {
   id: number;
   channelId: number;
@@ -29,6 +38,7 @@ export interface Message {
   createdAt: number;
   editedAt?: number;
   reactions?: Partial<Record<Reaction, string[]>>;
+  preview?: Preview;
 }
 
 export interface Gif {

@@ -20,13 +20,13 @@ export default function Composer({
   channel,
   users,
   onEditLast,
-  onCollapseImages,
+  onCollapse,
   onTyping,
 }: {
   channel: Channel;
   users: UserSummary[];
   onEditLast: () => void;
-  onCollapseImages: () => void;
+  onCollapse: () => void;
   onTyping: () => void;
 }) {
   const [body, setBody] = useState("");
@@ -110,7 +110,7 @@ export default function Composer({
     if (!text) return;
     setBody("");
     setMention(null);
-    if (text === "/collapse") return onCollapseImages();
+    if (text === "/collapse") return onCollapse();
     const gif = /^\/gif(?:\s+(.*))?$/.exec(text);
     if (gif) return void openGifs(gif[1]?.trim() ?? "");
     try {

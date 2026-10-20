@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2, X } from "lucide-react";
+import { EyeOff, Pencil, Trash2, X } from "lucide-react";
 import { Button, IconButton } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { reactions } from "./MessageList";
@@ -16,6 +16,7 @@ export default function MessageActions({
   onReact,
   onEdit,
   onDelete,
+  onRemovePreview,
   onClose,
 }: {
   message: Message;
@@ -23,6 +24,7 @@ export default function MessageActions({
   onReact: (reaction: Reaction) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRemovePreview: () => void;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -81,6 +83,11 @@ export default function MessageActions({
           <Button size="sm" variant="ghost" onClick={onEdit}>
             <Pencil /> edit
           </Button>
+          {message.preview?.kind === "card" && (
+            <Button size="sm" variant="ghost" onClick={onRemovePreview}>
+              <EyeOff /> remove preview
+            </Button>
+          )}
           <Button size="sm" variant="danger" onClick={onDelete}>
             <Trash2 /> delete
           </Button>
