@@ -280,6 +280,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
 
   function open(c: Channel) {
     setSelected(c);
+    if (c.type === "dm") setHiddenDms((ids) => ids.filter((id) => id !== c.id));
     setView("channel");
     setOpenShare(null);
     if (!desktop.current) setSidebarOpen(false);
@@ -297,7 +298,6 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     try {
       const dm = await api<Channel>(`/dms/${u.id}`, { method: "POST" });
       setChannels((cs) => (cs.some((c) => c.id === dm.id) ? cs : [...cs, dm]));
-      setHiddenDms((ids) => ids.filter((id) => id !== dm.id));
       open(dm);
     } catch {
       // a DM that will not open is not worth an error state
@@ -389,7 +389,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         )}
       >
         <Sidebar
-          channels={channels.filter((c) => c.type !== "dm" || !hiddenDms.includes(c.id))}
+          channels={channels.filter(
+            (c) => c.type !== "dm" || !hiddenDms.includes(c.id) || unread[c.id],
+          )}
           unread={unread}
           selected={selected}
           users={users}
