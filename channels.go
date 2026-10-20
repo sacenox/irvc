@@ -323,7 +323,7 @@ func (s *Server) handleMessages(c *gin.Context) {
 		return
 	}
 	rows, err := s.db.Query(
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0)
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0), m.preview
 		 FROM messages m JOIN users u ON u.id = m.user_id
 		 WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 200`,
 		channelID,
@@ -336,10 +336,12 @@ func (s *Server) handleMessages(c *gin.Context) {
 	messages := []Message{}
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt); err != nil {
+		var preview sql.NullString
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &preview); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 			return
 		}
+		m.Preview = decodePreview(preview.String)
 		messages = append(messages, m)
 	}
 	// reverse to chronological order
@@ -451,6 +453,7 @@ func (s *Server) handleSendMessage(c *gin.Context) {
 	id, _ := res.LastInsertId()
 	msg := Message{ID: id, ChannelID: channelID, UserID: user.ID, Username: user.Username, Body: body, CreatedAt: now}
 	s.notifyChannel(chType, chName, event{Type: "message", Message: &msg})
+	go s.refreshPreview(id)
 	c.JSON(http.StatusOK, msg)
 }
 
@@ -488,9 +491,11 @@ func (s *Server) handleEditMessage(c *gin.Context) {
 	}
 	m.Username = user.Username
 	m.Reactions = s.messageReactions(m.ID)
+	m.Preview = s.messagePreview(m.ID)
 	var chType, chName string
 	s.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, m.ChannelID).Scan(&chType, &chName)
 	s.notifyChannel(chType, chName, event{Type: "message_edit", Message: &m})
+	go s.refreshPreview(m.ID)
 	c.JSON(http.StatusOK, m)
 }
 
@@ -553,6 +558,7 @@ func (s *Server) handleToggleReaction(c *gin.Context) {
 		}
 	}
 	m.Reactions = s.messageReactions(m.ID)
+	m.Preview = s.messagePreview(m.ID)
 	s.notifyChannel(chType, chName, event{Type: "message_edit", Message: &m})
 	c.JSON(http.StatusOK, m)
 }

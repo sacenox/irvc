@@ -20,12 +20,14 @@ export default function Composer({
   channel,
   users,
   onEditLast,
-  onCollapseImages,
+  onCollapse,
+  onTyping,
 }: {
   channel: Channel;
   users: UserSummary[];
   onEditLast: () => void;
-  onCollapseImages: () => void;
+  onCollapse: () => void;
+  onTyping: () => void;
 }) {
   const [body, setBody] = useState("");
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
@@ -108,7 +110,7 @@ export default function Composer({
     if (!text) return;
     setBody("");
     setMention(null);
-    if (text === "/collapse") return onCollapseImages();
+    if (text === "/collapse") return onCollapse();
     const gif = /^\/gif(?:\s+(.*))?$/.exec(text);
     if (gif) return void openGifs(gif[1]?.trim() ?? "");
     try {
@@ -238,6 +240,7 @@ export default function Composer({
           value={body}
           onChange={(e) => {
             setBody(e.target.value);
+            if (e.target.value.trim()) onTyping();
             detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
           }}
           onKeyDown={onKeyDown}
