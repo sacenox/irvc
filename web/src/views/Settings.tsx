@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Moon, RotateCcw, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { Room } from "livekit-client";
 import { Button, Field, Section, Select, TextInput, Toggle } from "@/ui";
 import type { AudioPresetName, FontSize, ScreenShareQuality, Settings as Prefs } from "../lib/settings";
@@ -66,7 +66,6 @@ export default function SettingsView({
     setMode: (m: Mode) => void;
     setPreset: (p: PresetId) => void;
     setToken: (t: Token, color: string) => void;
-    resetTokens: () => void;
     setScheme: (s: Scheme) => void;
     setSkittles: (v: boolean) => void;
   };
@@ -77,23 +76,23 @@ export default function SettingsView({
   // preview. In a call, reuse the live level to avoid capturing twice.
   const preview = useMicPreview(settings, voice.status !== "live");
   const meter = voice.status === "live" ? voice.micLevel : preview;
-  const { prefs, setMode, setPreset, setToken, resetTokens, setScheme, setSkittles } = theme;
+  const { prefs, setMode, setPreset, setToken, setScheme, setSkittles } = theme;
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 p-4 md:p-6">
       <Section label="Appearance">
-        <div className="flex gap-2 px-2">
-          {(["light", "dark"] as const).map((m) => (
-            <Button
-              key={m}
-              variant={prefs.mode === m ? "primary" : "secondary"}
-              className="flex-1"
-              onClick={() => setMode(m)}
-            >
-              {m === "light" ? <Sun /> : <Moon />} {m}
-            </Button>
-          ))}
-        </div>
+        <Field label="text size">
+          <Select
+            value={settings.fontSize}
+            onChange={(v) => update({ fontSize: v as FontSize })}
+            options={[
+              { value: "default", label: "default" },
+              { value: "normal", label: "medium" },
+              { value: "large", label: "help i'm old" },
+            ]}
+          />
+        </Field>
+        <Toggle label="skittles" checked={prefs.skittles} onChange={setSkittles} />
         <Field label="palette">
           <Select
             value={prefs.preset}
@@ -101,44 +100,46 @@ export default function SettingsView({
             options={presets.map((p) => ({ value: p.id, label: p.label }))}
           />
         </Field>
-        <Field label="text size">
-          <Select
-            value={settings.fontSize}
-            onChange={(v) => update({ fontSize: v as FontSize })}
-            options={[
-              { value: "normal", label: "normal" },
-              { value: "default", label: "browser default" },
-              { value: "large", label: "Help I'm old" },
-            ]}
-          />
-        </Field>
+        {prefs.preset === "custom" ? (
+          <>
+            <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+              {TOKENS.map((t) => (
+                <ColorField
+                  key={t}
+                  token={t}
+                  mode={prefs.mode}
+                  preset={prefs.base}
+                  override={prefs.overrides[prefs.mode][t]}
+                  onChange={(color) => setToken(t, color)}
+                />
+              ))}
+            </div>
+            <Field label="load palette">
+              <SchemePicker current={prefs.scheme?.name} onPick={setScheme} />
+            </Field>
+          </>
+        ) : (
+          <div className="mt-2 flex gap-2 px-2">
+            {(["light", "dark"] as const).map((m) => (
+              <Button
+                key={m}
+                variant={prefs.mode === m ? "primary" : "secondary"}
+                className="flex-1"
+                onClick={() => setMode(m)}
+              >
+                {m === "light" ? <Sun /> : <Moon />} {m}
+              </Button>
+            ))}
+          </div>
+        )}
       </Section>
 
-      <Section label={`Colors · ${prefs.mode} mode`}>
-        <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-          {TOKENS.map((t) => (
-            <ColorField
-              key={t}
-              token={t}
-              mode={prefs.mode}
-              preset={prefs.preset}
-              override={prefs.overrides[prefs.mode][t]}
-              onChange={(color) => setToken(t, color)}
-            />
-          ))}
-        </div>
-        <div className="space-y-1 pt-2">
-          <h3 className="section-label px-2">experimental</h3>
-          <Field label="external palette">
-            <SchemePicker current={prefs.scheme?.name} onPick={setScheme} />
-          </Field>
-          <Toggle label="skittles" checked={prefs.skittles} onChange={setSkittles} />
-        </div>
-        <div className="flex justify-end px-2 pt-1">
-          <Button variant="ghost" onClick={resetTokens}>
-            <RotateCcw /> reset to palette
-          </Button>
-        </div>
+      <Section label="Chat">
+        <Toggle
+          label="typing indicator"
+          checked={settings.typingIndicator}
+          onChange={(v) => update({ typingIndicator: v })}
+        />
       </Section>
 
       <Section label="Sounds">

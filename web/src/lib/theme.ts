@@ -33,16 +33,21 @@ export const tokenLabels: Record<Token, string> = {
   danger: "danger",
 };
 
+// "custom" is not a palette of its own: it layers the user's color overrides on
+// top of `base`, the built-in palette that was active when custom was chosen.
 export const presets = [
   { id: "nicotine", label: "80s nicotine" },
   { id: "tuxedo", label: "tuxedo" },
+  { id: "custom", label: "custom" },
 ] as const;
 
 export type PresetId = (typeof presets)[number]["id"];
+export type BasePreset = Exclude<PresetId, "custom">;
 
 export interface ThemePrefs {
   mode: Mode;
   preset: PresetId;
+  base: BasePreset;
   overrides: Record<Mode, Partial<Record<Token, string>>>;
   // Experimental: the terminal scheme the palette was seeded from (name, plus
   // the colors it contributes to skittles), and per-username colors.
@@ -55,6 +60,7 @@ const key = "irvc.theme";
 export const defaultPrefs: ThemePrefs = {
   mode: "light",
   preset: "nicotine",
+  base: "nicotine",
   overrides: { light: {}, dark: {} },
   scheme: null,
   skittles: false,
@@ -79,14 +85,28 @@ export function loadPrefs(): ThemePrefs {
   if (presets.some((p) => p.id === raw)) return { ...defaultPrefs, preset: raw as PresetId };
   if (!raw || typeof raw !== "object") return { ...defaultPrefs, mode: systemMode() };
   const p = raw as Partial<ThemePrefs>;
+  const mode: Mode = p.mode === "dark" ? "dark" : "light";
+  const overrides = { light: p.overrides?.light ?? {}, dark: p.overrides?.dark ?? {} };
+  let preset: PresetId = presets.some((x) => x.id === p.preset) ? (p.preset as PresetId) : defaultPrefs.preset;
+  let base: BasePreset = p.base === "tuxedo" || p.base === "nicotine" ? p.base : defaultPrefs.base;
+  // Overrides used to sit on top of any preset. They now only exist under
+  // "custom", so a saved palette with edits becomes a custom one.
+  if (preset !== "custom" && Object.keys(overrides[mode]).length > 0) {
+    base = preset;
+    preset = "custom";
+  }
   return {
-    mode: p.mode === "dark" ? "dark" : "light",
-    preset: presets.some((x) => x.id === p.preset) ? (p.preset as PresetId) : defaultPrefs.preset,
-    overrides: { light: p.overrides?.light ?? {}, dark: p.overrides?.dark ?? {} },
+    mode,
+    preset,
+    base,
+    overrides,
     scheme: p.scheme?.name && Array.isArray(p.scheme.colors) ? p.scheme : null,
     skittles: p.skittles === true,
   };
 }
+
+// basePalette is the built-in palette whose CSS is in effect.
+const basePalette = (p: ThemePrefs): BasePreset => (p.preset === "custom" ? p.base : p.preset);
 
 // applyTheme writes the mode class, the preset attribute and the user's
 // overrides onto <html>. The palettes themselves live in CSS, so switching
@@ -94,16 +114,16 @@ export function loadPrefs(): ThemePrefs {
 export function applyTheme(prefs: ThemePrefs) {
   const el = document.documentElement;
   el.classList.toggle("dark", prefs.mode === "dark");
-  el.dataset.preset = prefs.preset;
+  el.dataset.preset = basePalette(prefs);
   for (const t of TOKENS) {
-    const v = prefs.overrides[prefs.mode][t];
+    const v = prefs.preset === "custom" ? prefs.overrides[prefs.mode][t] : undefined;
     if (v) el.style.setProperty(cssVar(t), v);
     else el.style.removeProperty(cssVar(t));
   }
   // Skittles: --user-N are only defined while it is on; userColor() falls back
   // to the accent otherwise. Needs the resolved bg/fg, hence after the loop.
   const colors = prefs.skittles
-    ? skittlesPalette(prefs.scheme?.colors, effective("bg"), effective("fg"), prefs.preset)
+    ? skittlesPalette(prefs.scheme?.colors, effective("bg"), effective("fg"), basePalette(prefs))
     : [];
   for (let i = 0; i < SKITTLES; i++) {
     if (colors[i]) el.style.setProperty(`--user-${i}`, colors[i]);
@@ -154,7 +174,12 @@ export function useTheme() {
   const setMode = useCallback((mode: Mode) => setPrefs((p) => ({ ...p, mode })), []);
   const setPreset = useCallback(
     (preset: PresetId) =>
-      setPrefs((p) => ({ ...p, preset, scheme: null, overrides: { light: {}, dark: {} } })),
+      setPrefs((p) => {
+        if (preset === p.preset) return p;
+        // Custom starts from whatever built-in palette (and mode) is showing.
+        const base = preset === "custom" ? basePalette(p) : p.base;
+        return { ...p, preset, base, scheme: null, overrides: { light: {}, dark: {} } };
+      }),
     [],
   );
   const setToken = useCallback(
@@ -163,10 +188,6 @@ export function useTheme() {
         ...p,
         overrides: { ...p.overrides, [p.mode]: { ...p.overrides[p.mode], [t]: color } },
       })),
-    [],
-  );
-  const resetTokens = useCallback(
-    () => setPrefs((p) => ({ ...p, scheme: null, overrides: { ...p.overrides, [p.mode]: {} } })),
     [],
   );
   // A scheme is dark or light by nature, so applying one switches to that mode
@@ -178,6 +199,8 @@ export function useTheme() {
         return {
           ...p,
           mode,
+          preset: "custom",
+          base: basePalette(p),
           scheme: { name: s.n, colors: schemeColors(s) },
           overrides: { ...p.overrides, [mode]: toPalette(s) },
         };
@@ -186,5 +209,5 @@ export function useTheme() {
   );
   const setSkittles = useCallback((skittles: boolean) => setPrefs((p) => ({ ...p, skittles })), []);
 
-  return { prefs, setMode, setPreset, setToken, resetTokens, setScheme, setSkittles };
+  return { prefs, setMode, setPreset, setToken, setScheme, setSkittles };
 }

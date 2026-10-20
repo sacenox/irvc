@@ -23,6 +23,7 @@ type event struct {
 	Voice     map[string][]VoiceOccupant `json:"voice,omitempty"`
 	Channel   *Channel                   `json:"channel,omitempty"`
 	ChannelID int64                      `json:"channelId,omitempty"`
+	Username  string                     `json:"username,omitempty"`
 }
 
 // VoiceOccupant is one user in a voice channel, as broadcast with presence.
@@ -47,6 +48,7 @@ type client struct {
 	userID   int64
 	username string
 	voiceID  int64
+	typedAt  time.Time // last accepted typing event; only touched by readPump
 	muted    bool
 	deafened bool
 	conn     *websocket.Conn
@@ -120,6 +122,37 @@ func (h *hub) setVoice(c *client, channelID int64, muted, deafened bool) {
 	}
 	h.mu.Unlock()
 	h.broadcastPresence()
+}
+
+// typingEvery is the shortest gap between typing events relayed for one
+// connection, so a client cannot flood a channel with them.
+const typingEvery = 2 * time.Second
+
+// typing tells everyone who can see channelID that c's user is typing in it.
+// It is ephemeral: nothing is stored, and it is relayed only to people who are
+// allowed in the channel (everyone for text, the two participants for a DM).
+func (h *hub) typing(c *client, channelID int64) {
+	if time.Since(c.typedAt) < typingEvery {
+		return
+	}
+	var chType, chName string
+	if h.db.QueryRow(`SELECT type, name FROM channels WHERE id = ?`, channelID).Scan(&chType, &chName) != nil {
+		return
+	}
+	ev := event{Type: "typing", ChannelID: channelID, Username: c.username}
+	switch chType {
+	case "text":
+		h.broadcast(ev)
+	case "dm":
+		if u1, u2, ok := parseDM(chName); ok && (u1 == c.userID || u2 == c.userID) {
+			h.sendTo(ev, u1, u2)
+		} else {
+			return
+		}
+	default:
+		return
+	}
+	c.typedAt = time.Now()
 }
 
 func (h *hub) users() []string {
@@ -299,6 +332,8 @@ func (c *client) readPump() {
 		switch in.Type {
 		case "voice":
 			c.hub.setVoice(c, in.ChannelID, in.Muted, in.Deafened)
+		case "typing":
+			c.hub.typing(c, in.ChannelID)
 		case "ping":
 			// Application-level heartbeat: the browser answers protocol pings
 			// itself, so a client cannot see them. This lets it detect a

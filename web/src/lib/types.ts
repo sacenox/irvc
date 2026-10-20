@@ -53,11 +53,13 @@ export interface WSEvent {
     | "channel"
     | "channel_delete"
     | "ring"
-    | "ring_end";
+    | "ring_end"
+    | "typing";
   message?: Message;
   users?: string[];
   roster?: UserSummary[];
   voice?: Record<string, VoiceOccupant[]>;
   channel?: Channel;
   channelId?: number;
+  username?: string;
 }

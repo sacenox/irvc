@@ -56,6 +56,20 @@ function loadLastChannel(userId: number): number | null {
   }
 }
 
+// How long a "typing" event keeps someone listed. Clients resend every few
+// seconds while typing, so this only has to outlast that gap.
+const typingTtl = 5_000;
+const typingEvery = 3_000;
+
+// typingLabel is the line shown under the message list.
+function typingLabel(names: string[]) {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} are typing…`;
+  return "several people are typing…";
+}
+
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hiddenDms, setHiddenDms] = useState<number[]>(loadHiddenDms);
@@ -80,6 +94,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   // thing we told it and replay that on every (re)connect.
   const voiceState = useRef<VoiceState>({ channelId: 0, muted: false, deafened: false });
   const { settings, update } = useSettings();
+  // channel id -> username -> when we last heard them type
+  const [typing, setTyping] = useState<Record<number, Record<string, number>>>({});
+  const lastTypingSent = useRef({ channel: 0, at: 0 });
 
   const markRead = useCallback((id: number) => {
     setUnread((u) => {
@@ -119,10 +136,22 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
               if (c) open(c);
             })
             .catch(() => {});
+      } else if (ev.type === "typing") {
+        if (!settings.typingIndicator || !ev.channelId || !ev.username) return;
+        if (ev.username === user.username) return;
+        setTyping((t) => ({
+          ...t,
+          [ev.channelId!]: { ...t[ev.channelId!], [ev.username!]: Date.now() },
+        }));
       } else if (ev.type === "ring_end" && ev.channelId) {
         setRinging((r) => (r === ev.channelId ? null : r));
       } else if (ev.message) {
         if (ev.type === "message") {
+          // A sent message ends that person's typing.
+          setTyping((t) => {
+            const { [ev.message!.username]: _, ...rest } = t[ev.message!.channelId] ?? {};
+            return t[ev.message!.channelId] ? { ...t, [ev.message!.channelId]: rest } : t;
+          });
           setChannels((cs) => {
             if (!cs.some((c) => c.id === ev.message!.channelId)) {
               api<Channel[]>("/channels")
@@ -202,6 +231,41 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       // storage unavailable; collapse state just won't persist
     }
   }, [collapsed]);
+
+  // Expire stale typing entries; the interval only runs while there are any.
+  const anyTyping = Object.values(typing).some((c) => Object.keys(c).length > 0);
+  useEffect(() => {
+    if (!anyTyping) return;
+    const id = setInterval(() => {
+      const cutoff = Date.now() - typingTtl;
+      setTyping((t) => {
+        let changed = false;
+        const next: typeof t = {};
+        for (const [ch, users] of Object.entries(t)) {
+          const live = Object.fromEntries(Object.entries(users).filter(([, at]) => at > cutoff));
+          if (Object.keys(live).length !== Object.keys(users).length) changed = true;
+          if (Object.keys(live).length) next[Number(ch)] = live;
+          else if (Object.keys(users).length) changed = true;
+        }
+        return changed ? next : t;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [anyTyping]);
+
+  // Turning the setting off hides everything already showing.
+  useEffect(() => {
+    if (!settings.typingIndicator) setTyping({});
+  }, [settings.typingIndicator]);
+
+  function sendTyping() {
+    if (!settings.typingIndicator || !selected) return;
+    const now = Date.now();
+    const last = lastTypingSent.current;
+    if (last.channel === selected.id && now - last.at < typingEvery) return;
+    lastTypingSent.current = { channel: selected.id, at: now };
+    send(JSON.stringify({ type: "typing", channelId: selected.id }));
+  }
 
   // Escape dismisses the message actions pane, same as its close button.
   useEffect(() => {
@@ -511,6 +575,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 onCancelEdit={() => setEditing(null)}
                 onSaveEdit={saveEdit}
               />
+              <div className="h-5 shrink-0 truncate px-3 text-xs text-faint md:px-4" aria-live="polite">
+                {settings.typingIndicator &&
+                  typingLabel(Object.keys(typing[selected.id] ?? {}).sort())}
+              </div>
               {active && !editing && (
                 <MessageActions
                   message={active}
@@ -525,6 +593,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 channel={selected}
                 users={users}
                 onEditLast={startEditLast}
+                onTyping={sendTyping}
                 onCollapseImages={() =>
                   setCollapsed(
                     (prev) =>

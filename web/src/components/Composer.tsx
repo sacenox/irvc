@@ -21,11 +21,13 @@ export default function Composer({
   users,
   onEditLast,
   onCollapseImages,
+  onTyping,
 }: {
   channel: Channel;
   users: UserSummary[];
   onEditLast: () => void;
   onCollapseImages: () => void;
+  onTyping: () => void;
 }) {
   const [body, setBody] = useState("");
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
@@ -238,6 +240,7 @@ export default function Composer({
           value={body}
           onChange={(e) => {
             setBody(e.target.value);
+            if (e.target.value.trim()) onTyping();
             detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
           }}
           onKeyDown={onKeyDown}
