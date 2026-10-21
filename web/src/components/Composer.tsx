@@ -20,12 +20,12 @@ export default function Composer({
   channel,
   users,
   onEditLast,
-  onCollapseImages,
+  onCollapseMedia,
 }: {
   channel: Channel;
   users: UserSummary[];
   onEditLast: () => void;
-  onCollapseImages: () => void;
+  onCollapseMedia: () => void;
 }) {
   const [body, setBody] = useState("");
   const [mention, setMention] = useState<{ query: string; start: number; index: number } | null>(
@@ -77,16 +77,26 @@ export default function Composer({
     });
   }
 
+  // media reports whether a file is worth uploading: a raster image or a
+  // browser-playable video. The name check catches files the browser gave no
+  // type, so the server can refuse them out loud instead of them vanishing.
+  const media = (f: File) =>
+    f.type.startsWith("image/") || f.type.startsWith("video/") || /\.(png|jpe?g|gif|webp|mp4|webm)$/i.test(f.name);
+
   async function attach(files: File[]) {
+    const failed: string[] = [];
     for (const f of files) {
-      if (!f.type.startsWith("image/")) continue;
+      if (!media(f)) continue;
       try {
         const { url } = await upload(f);
         insert(`![${f.name}](${url})\n`);
-      } catch {
-        // a failed upload should not block the rest
+      } catch (e) {
+        // a failed upload should not block the rest, but say why
+        failed.push(e instanceof Error ? e.message : "could not upload");
       }
     }
+    if (failed.length === 1) toast(failed[0]);
+    else if (failed.length > 1) toast(`${failed.length} uploads failed: ${failed[0]}`);
   }
 
   async function openGifs(query: string) {
@@ -108,7 +118,7 @@ export default function Composer({
     if (!text) return;
     setBody("");
     setMention(null);
-    if (text === "/collapse") return onCollapseImages();
+    if (text === "/collapse") return onCollapseMedia();
     const gif = /^\/gif(?:\s+(.*))?$/.exec(text);
     if (gif) return void openGifs(gif[1]?.trim() ?? "");
     try {
@@ -146,15 +156,15 @@ export default function Composer({
     }
   }
 
-  // Images pasted anywhere in the composer are uploaded and inlined.
+  // Media pasted anywhere in the composer is uploaded and inlined.
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) return;
+    const files = [...e.clipboardData.files].filter(media);
+    if (files.length === 0) return;
     e.preventDefault();
-    attach(images);
+    attach(files);
   }
 
-  // Dropping an image anywhere on the page attaches it. The listener is
+  // Dropping media anywhere on the page attaches it. The listener is
   // registered once and reads attach through a ref.
   const attachRef = useRef(attach);
   attachRef.current = attach;
@@ -212,7 +222,7 @@ export default function Composer({
         <input
           ref={file}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
           onChange={(e) => {
@@ -221,7 +231,7 @@ export default function Composer({
           }}
         />
         <IconButton
-          label="attach image"
+          label="attach media"
           size="sm"
           onClick={() => file.current?.click()}
           className="mb-0.5"

@@ -3,13 +3,15 @@ import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { attachmentNames, isVideo } from "../lib/media";
 
 const Collapsed = createContext(false);
 
-// Images render inline; clicking one opens it in a full-window focus dialog.
-// When the message's header is collapsed, images are hidden and their names
-// show as chips beside the header toggle.
-function Image({ src, alt }: { src?: string; alt?: string }) {
+// Media renders images inline and video as a player capped to the image size.
+// Clicking an image opens it in a full-window focus dialog. When the message's
+// header is collapsed, both are hidden and their names show as chips beside the
+// header toggle.
+function Media({ src, alt }: { src?: string; alt?: string }) {
   const [open, setOpen] = useState(false);
   const collapsed = useContext(Collapsed);
   // Esc closes the viewer. Capture phase + stopPropagation so it doesn't also
@@ -26,6 +28,15 @@ function Image({ src, alt }: { src?: string; alt?: string }) {
   }, [open]);
   if (!src) return alt ? <span>{alt}</span> : null;
   if (collapsed) return null; // names are shown in the header row instead
+  if (isVideo(src)) {
+    // preload=metadata with the #t=0.1 fragment asks the browser for the first
+    // frame as a thumbnail, so no poster and no full download are needed.
+    return (
+      <video src={`${src}#t=0.1`} controls playsInline preload="metadata">
+        <a href={src}>{alt || "video"}</a>
+      </video>
+    );
+  }
   return (
     <>
       <img
@@ -53,7 +64,7 @@ const components = {
       {children}
     </a>
   ),
-  img: Image,
+  img: Media,
 };
 
 class Fallback extends Component<{ text: string; children: ReactNode }, { failed: boolean }> {
@@ -73,7 +84,7 @@ class Fallback extends Component<{ text: string; children: ReactNode }, { failed
 
 // Markdown renders a message body as GFM. Single newlines become hard breaks so
 // multiline input shows as typed. If rendering ever throws, the raw text is
-// shown instead. Messages containing images get a header to collapse them; the
+// shown instead. Messages containing media get a header to collapse them; the
 // header lines up with the username column.
 export default function Markdown({
   text,
@@ -84,7 +95,7 @@ export default function Markdown({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const names = [...text.matchAll(/!\[([^\]]*)\]\([^)]+\)/g)].map((m) => m[1] || "image");
+  const names = attachmentNames(text);
   const count = names.length;
   return (
     <Fallback text={text}>
@@ -93,11 +104,11 @@ export default function Markdown({
           <button
             type="button"
             onClick={onToggle}
-            title={collapsed ? "show images" : "hide images"}
+            title={collapsed ? "show media" : "hide media"}
             className="flex items-center gap-1 text-xs leading-6 text-faint hover:text-muted"
           >
             {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-            {count} image{count > 1 ? "s" : ""}
+            {count} attachment{count > 1 ? "s" : ""}
           </button>
           {collapsed &&
             names.map((name, i) => (

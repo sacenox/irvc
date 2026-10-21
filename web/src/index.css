@@ -294,7 +294,8 @@
   .md td {
     @apply border border-line px-2 py-1 text-left;
   }
-  .md img {
+  .md img,
+  .md video {
     @apply my-1 max-h-80 max-w-full rounded-md border border-line;
   }
 }

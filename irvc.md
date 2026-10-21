@@ -12,7 +12,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 - Server-side accounts, invite-only.
 - Text channels and 1-on-1 DMs with persisted history (IRC-like), GFM markdown, multiline compose, mentions, message editing and deletion.
 - Text and voice channels created and deleted from the sidebar; the seeded channels are permanent.
-- Image attachments (raster only), stored on disk.
+- Image and video attachments, stored on disk.
 - Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.
 - Screen sharing into a voice channel, with tab/system audio, simulcast, and a 720p/1080p quality choice.
 - 1-on-1 voice and video calls inside a DM, with a ring tone the callee can switch off.
@@ -70,7 +70,7 @@ read_state (user_id, channel_id, last_read_message_id, updated_at)
 - Messages are returned joined with their author's username.
 - Seed: one text channel `#general` and one voice channel `general`, both marked permanent.
 - DMs: `type = 'dm'` channels with canonical name `u:<min_id>:<max_id>`, resolved to the peer's username for each participant.
-- Uploaded images: random names, raster only (no SVG/HTML), served with `nosniff`.
+- Uploaded media: random names, raster images and mp4/webm video only (no SVG/HTML), served with `nosniff` and Range support, so video streams and seeks.
 
 ## Behavior
 
@@ -78,8 +78,8 @@ read_state (user_id, channel_id, last_read_message_id, updated_at)
 - **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
 - **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
 - **Unread:** `read_state` stores each user's last-read message per channel; `/channels` returns the count of newer messages by others. Opening a channel marks it read, so the count survives reload and is shared across devices.
-- **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides images in the current channel; `/gif [query]` opens a picker with the top Giphy results (trending when no query) to insert one. The gif picker is disabled without `IRVC_GIPHY_API_KEY`.
-- **Images:** pasted or attached, uploaded, rendered inline with a click-to-zoom dialog. Collapsible per message or channel-wide. Gifs from Giphy can also be inserted with the gif picker.
+- **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides media in the current channel; `/gif [query]` opens a picker with the top Giphy results (trending when no query) to insert one. The gif picker is disabled without `IRVC_GIPHY_API_KEY`.
+- **Media:** pasted or attached, uploaded, rendered inline. Images open in a click-to-zoom dialog; video renders as a player capped to the image size, showing its first frame as a thumbnail. Collapsible per message or channel-wide. Gifs from Giphy can also be inserted with the gif picker.
 - **Voice:** joining a voice channel connects to its LiveKit room (`voice-<id>`). Not persisted, not recorded. Occupants are visible to everyone without joining.
 - **Calls in DMs:** a DM holds a 1-on-1 voice or video call. It reuses the voice-token path — a DM call mints a token for the DM's own room — so a call is the same LiveKit machinery as a voice channel, attached to the DM instead. Starting one rings the peer with a slow repeating `beep()` (toggleable in settings) and signals them over the WS. Only one capture at a time, so starting a DM call leaves any voice channel first. The call pane is a horizontal split: peers' cameras fill the top, the DM's text shrinks to the bottom quarter.
 - **Screen share:** any participant may publish a screen share (with tab or system audio) into the room. It is not persisted and not recorded. Shares are visible only to participants, not to the rest of the server. Share audio plays through the normal audio path, so deafen and per-peer volume apply.
@@ -126,7 +126,7 @@ IRVC_SESSION_SECRET     required to run
 IRVC_LIVEKIT_URL        browser-facing
 IRVC_LIVEKIT_API_KEY
 IRVC_LIVEKIT_SECRET
-IRVC_MEDIA_DIR          uploaded image storage
+IRVC_MEDIA_DIR          uploaded media storage
 IRVC_MAX_UPLOAD         max upload bytes
 IRVC_GIPHY_API_KEY      Giphy API key; the gif picker is disabled without it
 ```
