@@ -20,11 +20,6 @@ export function isMentioned(body: string, username: string) {
   return new RegExp(`(^|[^\\w-])@${username}(?![\\w-])`, "i").test(body);
 }
 
-// hasImage reports whether body contains a markdown image.
-export function hasImage(body: string) {
-  return /!\[[^\]]*\]\([^)]+\)/.test(body);
-}
-
 export default function MessageList({
   messages,
   username,
@@ -238,7 +233,7 @@ function Row({
       // selected, and when the tap lands on a link or the actions button.
       onClick={(e) => {
         if (!window.getSelection()?.isCollapsed) return;
-        if ((e.target as HTMLElement).closest("a,button")) return;
+        if ((e.target as HTMLElement).closest("a,button,video")) return;
         onSelect();
       }}
       className={cn(

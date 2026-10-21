@@ -308,8 +308,9 @@ func (p *previewer) cacheImage(ctx context.Context, src string) string {
 	if err != nil || len(data) > maxPreviewImage || len(data) == 0 {
 		return ""
 	}
-	ext, ok := imageExt[http.DetectContentType(data)]
-	if !ok {
+	ct := http.DetectContentType(data)
+	ext, ok := mediaExt[ct]
+	if !ok || !strings.HasPrefix(ct, "image/") {
 		return ""
 	}
 	name := randToken() + ext

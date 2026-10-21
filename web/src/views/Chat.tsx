@@ -13,7 +13,8 @@ import type { Channel, Message, Reaction, User, UserSummary, VoiceOccupant } fro
 import CallView from "../components/CallView";
 import Composer from "../components/Composer";
 import MessageActions from "../components/MessageActions";
-import MessageList, { hasImage } from "../components/MessageList";
+import MessageList from "../components/MessageList";
+import { hasMedia } from "../lib/media";
 import ScreenShareView from "../components/ScreenShare";
 import Sidebar from "../components/Sidebar";
 import VoiceBar from "../components/VoiceBar";
@@ -440,7 +441,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   // /collapse: fold every image and link preview in the open channel.
   function collapseAll() {
     setCollapsed(
-      (prev) => new Set([...prev, ...messages.filter((m) => hasImage(m.body)).map((m) => m.id)]),
+      (prev) => new Set([...prev, ...messages.filter((m) => hasMedia(m.body)).map((m) => m.id)]),
     );
     const cards = messages.filter((m) => m.preview?.kind === "card").map((m) => [m.id, true]);
     setPreviewState((prev) => ({ ...prev, ...Object.fromEntries(cards) }));
