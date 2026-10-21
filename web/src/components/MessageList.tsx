@@ -4,6 +4,7 @@ import { cn } from "cn";
 import { IconButton, TextArea } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { Time, dayKey, formatDay } from "../lib/time";
+import LinkPreview from "./LinkPreview";
 import Markdown from "./Markdown";
 import { userColor } from "../lib/scheme";
 
@@ -23,10 +24,14 @@ export default function MessageList({
   messages,
   username,
   collapsed,
+  previewCollapsed,
+  hidePreviews,
   editing,
   activeId,
   onSelect,
   onToggleImages,
+  onTogglePreview,
+  onRemovePreview,
   onEditBody,
   onCancelEdit,
   onSaveEdit,
@@ -34,10 +39,14 @@ export default function MessageList({
   messages: Message[];
   username: string;
   collapsed: Set<number>;
+  previewCollapsed: (id: number) => boolean;
+  hidePreviews: boolean;
   editing: { id: number; body: string } | null;
   activeId: number | null;
   onSelect: (msg: Message) => void;
   onToggleImages: (id: number) => void;
+  onTogglePreview: (id: number) => void;
+  onRemovePreview: (msg: Message) => void;
   onEditBody: (body: string) => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
@@ -108,8 +117,12 @@ export default function MessageList({
                 editing={editing?.id === m.id}
                 editBody={editing?.body ?? ""}
                 collapsed={collapsed.has(m.id)}
+                previewCollapsed={previewCollapsed(m.id)}
+                hidePreviews={hidePreviews}
                 onSelect={() => onSelect(m)}
                 onToggleImages={() => onToggleImages(m.id)}
+                onTogglePreview={() => onTogglePreview(m.id)}
+                onRemovePreview={m.username === username ? () => onRemovePreview(m) : undefined}
                 onEditBody={onEditBody}
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
@@ -142,8 +155,12 @@ function Row({
   editing,
   editBody,
   collapsed,
+  previewCollapsed,
+  hidePreviews,
   onSelect,
   onToggleImages,
+  onTogglePreview,
+  onRemovePreview,
   onEditBody,
   onSaveEdit,
   onCancelEdit,
@@ -157,8 +174,12 @@ function Row({
   editing: boolean;
   editBody: string;
   collapsed: boolean;
+  previewCollapsed: boolean;
+  hidePreviews: boolean;
   onSelect: () => void;
   onToggleImages: () => void;
+  onTogglePreview: () => void;
+  onRemovePreview?: () => void;
   onEditBody: (body: string) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
@@ -216,7 +237,7 @@ function Row({
         onSelect();
       }}
       className={cn(
-        "relative flex gap-2 px-3 py-0.5 md:px-4",
+        "group relative flex gap-2 px-3 py-0.5 md:px-4",
         mentioned ? "bg-accent/10" : active && "bg-raised",
       )}
     >
@@ -262,6 +283,15 @@ function Row({
           <div className="md pl-5 md:pl-8">
             <Markdown text={m.body} collapsed={collapsed} onToggle={onToggleImages} />
           </div>
+        )}
+        {!editing && !hidePreviews && m.preview?.kind === "card" && (
+          <LinkPreview
+            preview={m.preview}
+            collapsed={previewCollapsed}
+            onToggle={onTogglePreview}
+            onRemove={onRemovePreview}
+            pinned={active}
+          />
         )}
         {grouped && <span className="absolute top-0 right-2 md:right-3">{menuButton(true)}</span>}
         {chips.length > 0 && (

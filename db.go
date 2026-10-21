@@ -33,6 +33,7 @@ type Message struct {
 	CreatedAt int64               `json:"createdAt"`
 	EditedAt  int64               `json:"editedAt,omitempty"`
 	Reactions map[string][]string `json:"reactions,omitempty"`
+	Preview   *Preview            `json:"preview,omitempty"`
 }
 
 func OpenDB(path string) *sql.DB {
@@ -106,6 +107,7 @@ func migrate(db *sql.DB) {
 		log.Fatalf("migrate: %v", err)
 	}
 	db.Exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`)
+	db.Exec(`ALTER TABLE messages ADD COLUMN preview TEXT`)
 	db.Exec(`ALTER TABLE channels ADD COLUMN permanent INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`UPDATE channels SET permanent = 1 WHERE name = 'general' AND type IN ('text', 'voice')`)
 	var n int

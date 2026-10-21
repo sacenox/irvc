@@ -15,9 +15,10 @@ import (
 )
 
 type Server struct {
-	cfg *Config
-	db  *sql.DB
-	hub *hub
+	cfg      *Config
+	db       *sql.DB
+	hub      *hub
+	previews *previewer
 }
 
 // usage prints out human readable usage for fs
@@ -116,7 +117,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
 		log.Fatalf("media dir: %v", err)
 	}
-	s := &Server{cfg: cfg, db: db, hub: newHub(db)}
+	s := &Server{cfg: cfg, db: db, hub: newHub(db), previews: newPreviewer(cfg.MediaDir, false)}
 
 	r := gin.Default()
 	loginLimiter := newRateLimiter(10, time.Minute)
@@ -140,6 +141,7 @@ func runServer(cfg *Config, db *sql.DB) {
 	authed.POST("/channels/:id/read", s.handleMarkRead)
 	authed.PATCH("/messages/:id", s.handleEditMessage)
 	authed.DELETE("/messages/:id", s.handleDeleteMessage)
+	authed.DELETE("/messages/:id/preview", s.handleDeletePreview)
 	authed.POST("/messages/:id/reactions", s.handleToggleReaction)
 	authed.POST("/channels/:id/voice", s.handleVoiceToken)
 	authed.POST("/channels/:id/ring", s.handleRing(true))

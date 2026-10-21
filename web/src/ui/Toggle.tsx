@@ -5,11 +5,13 @@ export function Toggle({
   label,
   hint,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
   hint?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -17,8 +19,9 @@ export function Toggle({
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-raised"
+      className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors enabled:hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40"
     >
       <span className="min-w-0">
         <span className="block truncate">{label}</span>

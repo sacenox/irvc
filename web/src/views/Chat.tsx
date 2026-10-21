@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Video } from "lucide-react";
+import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Trash2, Video } from "lucide-react";
 import { cn } from "cn";
 import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
@@ -57,6 +57,34 @@ function loadLastChannel(userId: number): number | null {
   }
 }
 
+// How long a "typing" event keeps someone listed. Clients resend every few
+// seconds while typing, so this only has to outlast that gap.
+const typingTtl = 5_000;
+const typingEvery = 3_000;
+
+// typingLabel is the line shown under the message list.
+function typingLabel(names: string[]) {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} are typing…`;
+  return "several people are typing…";
+}
+
+// Per-message preview state the user chose by hand (true = collapsed). Anything
+// absent follows the "collapse previews by default" setting, so flipping that
+// setting never fights an explicit choice. Only the newest entries are kept.
+const previewKey = "irvc.previewCollapsed";
+const previewMax = 2000;
+
+function loadPreviewState(): Record<number, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(previewKey) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
 export default function Chat({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hiddenDms, setHiddenDms] = useState<number[]>(loadHiddenDms);
@@ -66,6 +94,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [messages, setMessages] = useState<Message[]>([]);
   const [unread, setUnread] = useState<Record<number, number>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(loadCollapsed);
+  const [previewState, setPreviewState] = useState<Record<number, boolean>>(loadPreviewState);
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
   const [active, setActive] = useState<Message | null>(null);
   const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
@@ -81,6 +110,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   // thing we told it and replay that on every (re)connect.
   const voiceState = useRef<VoiceState>({ channelId: 0, muted: false, deafened: false });
   const { settings, update } = useSettings();
+  // channel id -> username -> when we last heard them type
+  const [typing, setTyping] = useState<Record<number, Record<string, number>>>({});
+  const lastTypingSent = useRef({ channel: 0, at: 0 });
 
   const markRead = useCallback((id: number) => {
     setUnread((u) => {
@@ -120,10 +152,22 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
               if (c) open(c);
             })
             .catch(() => {});
+      } else if (ev.type === "typing") {
+        if (!settings.typingIndicator || !ev.channelId || !ev.username) return;
+        if (ev.username === user.username) return;
+        setTyping((t) => ({
+          ...t,
+          [ev.channelId!]: { ...t[ev.channelId!], [ev.username!]: Date.now() },
+        }));
       } else if (ev.type === "ring_end" && ev.channelId) {
         setRinging((r) => (r === ev.channelId ? null : r));
       } else if (ev.message) {
         if (ev.type === "message") {
+          // A sent message ends that person's typing.
+          setTyping((t) => {
+            const { [ev.message!.username]: _, ...rest } = t[ev.message!.channelId] ?? {};
+            return t[ev.message!.channelId] ? { ...t, [ev.message!.channelId]: rest } : t;
+          });
           setChannels((cs) => {
             if (!cs.some((c) => c.id === ev.message!.channelId)) {
               api<Channel[]>("/channels")
@@ -203,6 +247,41 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       // storage unavailable; collapse state just won't persist
     }
   }, [collapsed]);
+
+  // Expire stale typing entries; the interval only runs while there are any.
+  const anyTyping = Object.values(typing).some((c) => Object.keys(c).length > 0);
+  useEffect(() => {
+    if (!anyTyping) return;
+    const id = setInterval(() => {
+      const cutoff = Date.now() - typingTtl;
+      setTyping((t) => {
+        let changed = false;
+        const next: typeof t = {};
+        for (const [ch, users] of Object.entries(t)) {
+          const live = Object.fromEntries(Object.entries(users).filter(([, at]) => at > cutoff));
+          if (Object.keys(live).length !== Object.keys(users).length) changed = true;
+          if (Object.keys(live).length) next[Number(ch)] = live;
+          else if (Object.keys(users).length) changed = true;
+        }
+        return changed ? next : t;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [anyTyping]);
+
+  // Turning the setting off hides everything already showing.
+  useEffect(() => {
+    if (!settings.typingIndicator) setTyping({});
+  }, [settings.typingIndicator]);
+
+  function sendTyping() {
+    if (!settings.typingIndicator || !selected) return;
+    const now = Date.now();
+    const last = lastTypingSent.current;
+    if (last.channel === selected.id && now - last.at < typingEvery) return;
+    lastTypingSent.current = { channel: selected.id, at: now };
+    send(JSON.stringify({ type: "typing", channelId: selected.id }));
+  }
 
   // Escape dismisses the message actions pane, same as its close button.
   useEffect(() => {
@@ -350,9 +429,45 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     );
   }
 
+  // Removing a preview removes it for everyone; the server pushes the updated
+  // message to all clients, so only failures need handling here.
+  function removePreview(m: Message) {
+    setActive(null);
+    api<Message>(`/messages/${m.id}/preview`, { method: "DELETE" }).catch((e) =>
+      toast(e instanceof Error ? e.message : "could not remove preview"),
+    );
+  }
+
+  // /collapse: fold every image and link preview in the open channel.
+  function collapseAll() {
+    setCollapsed(
+      (prev) => new Set([...prev, ...messages.filter((m) => hasMedia(m.body)).map((m) => m.id)]),
+    );
+    const cards = messages.filter((m) => m.preview?.kind === "card").map((m) => [m.id, true]);
+    setPreviewState((prev) => ({ ...prev, ...Object.fromEntries(cards) }));
+  }
+
   function deleteMessage(m: Message) {
     setActive(null);
     api(`/messages/${m.id}`, { method: "DELETE" }).catch(() => {});
+  }
+
+  useEffect(() => {
+    try {
+      const keep = Object.keys(previewState)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .slice(-previewMax);
+      localStorage.setItem(previewKey, JSON.stringify(Object.fromEntries(keep.map((k) => [k, previewState[k]]))));
+    } catch {
+      // storage unavailable; choices just won't persist
+    }
+  }, [previewState]);
+
+  const previewCollapsed = (id: number) => previewState[id] ?? settings.collapsePreviews;
+
+  function togglePreview(id: number) {
+    setPreviewState((prev) => ({ ...prev, [id]: !(prev[id] ?? settings.collapsePreviews) }));
   }
 
   function toggleImages(id: number) {
@@ -479,7 +594,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 >
                   {(close) => (
                     <MenuItem danger onClick={() => (close(), deleteChannel(selected))}>
-                      delete channel
+                      <Trash2 size={14} /> delete channel
                     </MenuItem>
                   )}
                 </MenuPrimitive>
@@ -504,6 +619,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 messages={messages}
                 username={user.username}
                 collapsed={collapsed}
+                previewCollapsed={previewCollapsed}
+                hidePreviews={settings.hidePreviews}
+                onTogglePreview={togglePreview}
+                onRemovePreview={removePreview}
                 editing={editing}
                 activeId={active?.id ?? null}
                 onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
@@ -512,6 +631,10 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 onCancelEdit={() => setEditing(null)}
                 onSaveEdit={saveEdit}
               />
+              <div className="h-5 shrink-0 truncate px-3 text-xs text-faint md:px-4" aria-live="polite">
+                {settings.typingIndicator &&
+                  typingLabel(Object.keys(typing[selected.id] ?? {}).sort())}
+              </div>
               {active && !editing && (
                 <MessageActions
                   message={active}
@@ -519,6 +642,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                   onReact={(r) => react(active, r)}
                   onEdit={() => startEdit(active)}
                   onDelete={() => deleteMessage(active)}
+                  onRemovePreview={() => removePreview(active)}
                   onClose={() => setActive(null)}
                 />
               )}
@@ -526,12 +650,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 channel={selected}
                 users={users}
                 onEditLast={startEditLast}
-                onCollapseMedia={() =>
-                  setCollapsed(
-                    (prev) =>
-                      new Set([...prev, ...messages.filter((m) => hasMedia(m.body)).map((m) => m.id)]),
-                  )
-                }
+                onTyping={sendTyping}
+                onCollapse={collapseAll}
               />
             </div>
           </>
