@@ -58,11 +58,13 @@ const COLORED = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14];
 export function toPalette(s: Scheme): Record<Token, string> {
   const { bg, fg, c } = s;
   const ok = (h: string) => contrast(h, bg) >= 3;
+  const reds = [c[1], c[9]].sort((a, b) => contrast(b, bg) - contrast(a, bg));
+  // The reds are the danger, never the accent: a grayscale scheme keeps its
+  // gray accent and still gets a legible red.
   const accent =
     COLORED.map((i) => c[i])
-      .filter(ok)
+      .filter((h) => ok(h) && !reds.includes(h))
       .sort((a, b) => chroma(b) - chroma(a))[0] ?? fg;
-  const reds = [c[1], c[9]].sort((a, b) => contrast(b, bg) - contrast(a, bg));
   return {
     bg,
     surface: mix(bg, fg, 0.05),

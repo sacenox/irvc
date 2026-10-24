@@ -96,10 +96,13 @@ read_state (user_id, channel_id, last_read_message_id, updated_at)
   reference the roles. The shared vocabulary on top (`src/ui`) is buttons, inputs, fields,
   toggles, menus and lists — feature code composes those instead of inventing new Tailwind
   recipes, so the UI stays consistent by construction.
-- **Theming.** `80s-nicotine` (sepia, default) and `tuxedo` (grayscale) are presets of those
-  colors, not fixed themes: any color can be overridden per light/dark mode from the
-  settings pane and is stored with the rest of the preferences. Mode, preset and overrides
-  are applied before first paint.
+- **Theming.** One path from a theme to the colors: a fruit definition (background,
+  foreground and 16 ANSI colors, the same shape as the terminal schemes in `fruit/`) is
+  expanded into the palette tokens. The built-ins, `80s-nicotine` (sepia, default) and
+  `tuxedo` (grayscale), are fruit definitions too (`src/lib/fruit.ts`), one per mode, so
+  they are not special: any color can be overridden per light/dark mode from the settings
+  pane and is stored with the rest of the preferences. Mode, palette and overrides are
+  applied before first paint.
 - **No hover-only interactions.** Anything interactive is visible and reachable by tap and
   keyboard: per-message actions open from an always-present `⋯`, channel actions from a
   `⋯` menu, and the selected message's actions appear in a contextual bar above the
