@@ -90,6 +90,11 @@ CREATE TABLE IF NOT EXISTS reactions (
 	reaction   TEXT NOT NULL,
 	PRIMARY KEY (message_id, user_id, reaction)
 );
+CREATE TABLE IF NOT EXISTS pins (
+	message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+	channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	pinned_at  INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS read_state (
 	user_id              INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	channel_id           INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
@@ -98,6 +103,7 @@ CREATE TABLE IF NOT EXISTS read_state (
 	PRIMARY KEY (user_id, channel_id)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
+CREATE INDEX IF NOT EXISTS idx_pins_channel ON pins(channel_id, message_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_dm ON channels(name) WHERE type = 'dm';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_name ON channels(type, name) WHERE type != 'dm';
 `
