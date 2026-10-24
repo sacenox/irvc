@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { nicotine, tuxedo } from "./fruit";
 import { SKITTLES, isDark, schemeColors, skittlesPalette, toPalette, type Scheme } from "./scheme";
 
 export type Mode = "light" | "dark";
 
 // Every color the UI uses. Palettes and user overrides are both just maps of
-// these; the values live in index.css as CSS variables named "kebab of key".
+// these; the values land as CSS variables named "kebab of key".
 export const TOKENS = [
   "bg",
   "surface",
@@ -34,7 +35,7 @@ export const tokenLabels: Record<Token, string> = {
 };
 
 // "custom" is not a palette of its own: it layers the user's color overrides on
-// top of `base`, the built-in palette that was active when custom was chosen.
+// top of `base`, the built-in theme that was active when custom was chosen.
 export const presets = [
   { id: "nicotine", label: "80s nicotine" },
   { id: "tuxedo", label: "tuxedo" },
@@ -43,6 +44,10 @@ export const presets = [
 
 export type PresetId = (typeof presets)[number]["id"];
 export type BasePreset = Exclude<PresetId, "custom">;
+
+// The built-in themes are fruit definitions like any terminal scheme, so they
+// are only ever a source of a palette, never CSS of their own.
+const builtin: Record<BasePreset, Record<Mode, Scheme>> = { nicotine, tuxedo };
 
 export interface ThemePrefs {
   mode: Mode;
@@ -105,25 +110,24 @@ export function loadPrefs(): ThemePrefs {
   };
 }
 
-// basePalette is the built-in palette whose CSS is in effect.
+// basePalette is the built-in theme the palette comes from.
 const basePalette = (p: ThemePrefs): BasePreset => (p.preset === "custom" ? p.base : p.preset);
 
-// applyTheme writes the mode class, the preset attribute and the user's
-// overrides onto <html>. The palettes themselves live in CSS, so switching
-// preset is a single attribute change.
+// palette is the scheme→tokens expansion of the built-in theme in effect.
+const palette = (p: ThemePrefs) => toPalette(builtin[basePalette(p)][p.mode]);
+
+// applyTheme writes the mode class and every token onto <html>: the built-in
+// theme's palette, with the user's overrides on top when the preset is custom.
 export function applyTheme(prefs: ThemePrefs) {
   const el = document.documentElement;
   el.classList.toggle("dark", prefs.mode === "dark");
-  el.dataset.preset = basePalette(prefs);
-  for (const t of TOKENS) {
-    const v = prefs.preset === "custom" ? prefs.overrides[prefs.mode][t] : undefined;
-    if (v) el.style.setProperty(cssVar(t), v);
-    else el.style.removeProperty(cssVar(t));
-  }
+  const p = palette(prefs);
+  const over = prefs.preset === "custom" ? prefs.overrides[prefs.mode] : {};
+  for (const t of TOKENS) el.style.setProperty(cssVar(t), over[t] ?? p[t]);
   // Skittles: --user-N are only defined while it is on; userColor() falls back
-  // to the accent otherwise. Needs the resolved bg/fg, hence after the loop.
+  // to the accent otherwise.
   const colors = prefs.skittles
-    ? skittlesPalette(prefs.scheme?.colors, effective("bg"), effective("fg"), basePalette(prefs))
+    ? skittlesPalette(prefs.scheme?.colors, p.bg, p.fg, basePalette(prefs))
     : [];
   for (let i = 0; i < SKITTLES; i++) {
     if (colors[i]) el.style.setProperty(`--user-${i}`, colors[i]);
@@ -134,19 +138,7 @@ export function applyTheme(prefs: ThemePrefs) {
 // effective returns the color a token currently resolves to, so the theme
 // editor can seed its color inputs with the palette values.
 export function effective(t: Token): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(cssVar(t)).trim();
-  if (v.startsWith("#")) return v.length === 4 ? expand(v) : v;
-  return rgbToHex(v);
-}
-
-function expand(hex: string) {
-  return "#" + hex.slice(1).replace(/./g, (c) => c + c);
-}
-
-function rgbToHex(color: string) {
-  const m = color.match(/(\d+)\D+(\d+)\D+(\d+)/);
-  if (!m) return "#000000";
-  return "#" + m.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, "0")).join("");
+  return getComputedStyle(document.documentElement).getPropertyValue(cssVar(t)).trim();
 }
 
 export function useTheme() {

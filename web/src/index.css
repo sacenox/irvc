@@ -24,63 +24,16 @@
   --color-scrim: var(--scrim);
 }
 
-/* ── palettes ──────────────────────────────────────────────────────────── */
+/* ── palette ───────────────────────────────────────────────────────────── */
 
-/* 80s nicotine: sepia paper, the default. */
+/* The palette variables are written by applyTheme() in lib/theme.ts, expanded
+   from a fruit scheme (built-in in lib/fruit.ts, or a picked terminal scheme)
+   plus the user's overrides. Only the scrim, a plain dimming overlay, is fixed. */
 :root {
-  --bg: #f6efe2;
-  --surface: #ece2cf;
-  --raised: #fdfaf3;
-  --fg: #4a3418;
-  --muted: #8a6f4a;
-  --faint: #b3a086;
-  --line: #ddceb4;
-  --accent: #a9791f;
-  --accent-fg: #fdfaf3;
-  --danger: #b4432f;
-  --scrim: rgb(20 12 4 / 0.5);
+  --scrim: rgb(0 0 0 / 0.5);
 }
 
 .dark {
-  --bg: #0b0906;
-  --surface: #100c08;
-  --raised: #1a130c;
-  --fg: #d8b98f;
-  --muted: #9c7d57;
-  --faint: #6d583c;
-  --line: #2a2016;
-  --accent: #ffcc55;
-  --accent-fg: #171109;
-  --danger: #e0715a;
-  --scrim: rgb(0 0 0 / 0.6);
-}
-
-/* tuxedo: pure grayscale. */
-[data-preset="tuxedo"] {
-  --bg: #ffffff;
-  --surface: #f1f1f1;
-  --raised: #ffffff;
-  --fg: #141414;
-  --muted: #666666;
-  --faint: #a0a0a0;
-  --line: #dcdcdc;
-  --accent: #333333;
-  --accent-fg: #ffffff;
-  --danger: #b3261e;
-  --scrim: rgb(0 0 0 / 0.4);
-}
-
-.dark[data-preset="tuxedo"] {
-  --bg: #000000;
-  --surface: #0b0b0b;
-  --raised: #161616;
-  --fg: #e8e8e8;
-  --muted: #9a9a9a;
-  --faint: #6b6b6b;
-  --line: #272727;
-  --accent: #d4d4d4;
-  --accent-fg: #0a0a0a;
-  --danger: #e07a6a;
   --scrim: rgb(0 0 0 / 0.65);
 }
 
