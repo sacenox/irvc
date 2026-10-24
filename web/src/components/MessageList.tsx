@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef } from "react";
 import { Heart, Laugh, MoreHorizontal, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "cn";
-import { IconButton, TextArea } from "@/ui";
+import { Button, IconButton, TextArea } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { Time, dayKey, formatDay } from "../lib/time";
 import LinkPreview from "./LinkPreview";
@@ -22,6 +22,8 @@ export function isMentioned(body: string, username: string) {
 
 export default function MessageList({
   messages,
+  hasMore,
+  loadingOlder,
   username,
   collapsed,
   previewCollapsed,
@@ -29,6 +31,7 @@ export default function MessageList({
   editing,
   activeId,
   onSelect,
+  onLoadOlder,
   onToggleImages,
   onTogglePreview,
   onRemovePreview,
@@ -37,6 +40,8 @@ export default function MessageList({
   onSaveEdit,
 }: {
   messages: Message[];
+  hasMore: boolean;
+  loadingOlder: boolean;
   username: string;
   collapsed: Set<number>;
   previewCollapsed: (id: number) => boolean;
@@ -44,6 +49,7 @@ export default function MessageList({
   editing: { id: number; body: string } | null;
   activeId: number | null;
   onSelect: (msg: Message) => void;
+  onLoadOlder: () => void;
   onToggleImages: (id: number) => void;
   onTogglePreview: (id: number) => void;
   onRemovePreview: (msg: Message) => void;
@@ -57,17 +63,44 @@ export default function MessageList({
   // scroll event that is handled only after a lazy image grows the list, so
   // the gap to the bottom reads large even though the reader never scrolled.
   const pinned = useRef(0);
+  // How far the reader sits from the bottom. Older messages land above the
+  // reader, so this is the one thing a prepend must leave untouched.
+  const gap = useRef(0);
+
+  const measure = () => {
+    const el = list.current;
+    if (el) gap.current = el.scrollHeight - el.clientHeight - el.scrollTop;
+  };
 
   const pin = () => {
     const el = list.current;
     if (!el || !stick.current) return;
     el.scrollTop = el.scrollHeight;
     pinned.current = el.scrollTop;
+    measure();
   };
 
-  // Follow new messages while the reader stays at the bottom. The channel is
+  // Follow new messages while the reader stays at the bottom, and hold the
+  // reader's place when a page of older messages lands above. The channel is
   // remounted on switch, so this also lands on the newest message.
-  useLayoutEffect(pin);
+  const head = useRef(messages[0]?.id);
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    const id = messages[0]?.id;
+    // A prepend lowers the first id and keeps the old one in the list.
+    const older =
+      id !== undefined &&
+      head.current !== undefined &&
+      id < head.current &&
+      messages.some((m) => m.id === head.current);
+    if (older) {
+      el.scrollTop = el.scrollHeight - el.clientHeight - gap.current;
+      pinned.current = el.scrollTop;
+    } else pin();
+    head.current = id;
+    measure();
+  });
 
   useEffect(() => {
     const el = list.current;
@@ -79,6 +112,7 @@ export default function MessageList({
       // A scroll still sitting where we pinned is ours, so leave stick alone.
       if (el.scrollTop === pinned.current) return;
       stick.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      measure();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
@@ -93,6 +127,13 @@ export default function MessageList({
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2 [scrollbar-gutter:stable]"
     >
       <div>
+        {hasMore && (
+          <div className="flex justify-center px-3 py-2">
+            <Button size="sm" disabled={loadingOlder} onClick={onLoadOlder}>
+              {loadingOlder ? "loading…" : "load 100 more"}
+            </Button>
+          </div>
+        )}
         {messages.map((m, i) => {
           const prev = messages[i - 1];
           const action = m.body.startsWith("/me ") ? m.body.slice(4) : null;

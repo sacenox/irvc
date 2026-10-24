@@ -9,7 +9,7 @@ import { useSettings } from "../lib/settings";
 import { useTheme } from "../lib/theme";
 import { toast } from "../lib/toast";
 import { beep, useVoice, type VoiceState } from "../lib/voice";
-import type { Channel, Message, Reaction, User, UserSummary, VoiceOccupant } from "../lib/types";
+import type { Channel, Message, MessagePage, Reaction, User, UserSummary, VoiceOccupant } from "../lib/types";
 import CallView from "../components/CallView";
 import Composer from "../components/Composer";
 import MessageActions from "../components/MessageActions";
@@ -92,6 +92,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Message[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [unread, setUnread] = useState<Record<number, number>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(loadCollapsed);
   const [previewState, setPreviewState] = useState<Record<number, boolean>>(loadPreviewState);
@@ -104,6 +106,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const desktop = useRef(matchMedia("(min-width: 768px)").matches);
   const [sidebarOpen, setSidebarOpen] = useState(desktop.current);
   const selectedId = useRef<number | null>(null);
+  // The channel the messages in state came from.
+  const loaded = useRef<number | null>(null);
   // The channel of the DM call we started, so we can tell the peer when it ends.
   const rangRef = useRef<number | null>(null);
   // The server drops our voice state when the socket dies, so keep the last
@@ -338,12 +342,44 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   useEffect(() => {
     if (selected?.type !== "text" && selected?.type !== "dm") {
       setMessages([]);
+      setHasMore(false);
       return;
     }
-    api<Message[]>(`/channels/${selected.id}/messages`)
-      .then(setMessages)
+    const id = selected.id;
+    // The channel the loaded messages belong to, so a click on the hint can
+    // never page a channel that is not on screen.
+    loaded.current = null;
+    setHasMore(false);
+    setLoadingOlder(false);
+    api<MessagePage>(`/channels/${id}/messages`)
+      .then((page) => {
+        if (selectedId.current !== id) return;
+        loaded.current = id;
+        setMessages(page.messages);
+        setHasMore(page.hasMore);
+      })
       .catch(() => {});
   }, [selected]);
+
+  // loadOlder appends the page above the first loaded message. It only runs
+  // when the reader asks for it, so a slow channel costs nothing to scroll.
+  async function loadOlder() {
+    const id = selected?.id;
+    const before = messages[0]?.id;
+    if (id === undefined || before === undefined || loaded.current !== id || loadingOlder || !hasMore)
+      return;
+    setLoadingOlder(true);
+    try {
+      const page = await api<MessagePage>(`/channels/${id}/messages?before=${before}`);
+      if (selectedId.current !== id) return;
+      setMessages((prev) => [...page.messages, ...prev]);
+      setHasMore(page.hasMore);
+    } catch {
+      // The hint stays put, so the reader can try again.
+    } finally {
+      if (selectedId.current === id) setLoadingOlder(false);
+    }
+  }
 
   // Opening a channel clears its badge and tells the server, so the count stays
   // right on the next cold start and on the user's other devices.
@@ -617,6 +653,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
               <MessageList
                 key={selected.id}
                 messages={messages}
+                hasMore={hasMore}
+                loadingOlder={loadingOlder}
                 username={user.username}
                 collapsed={collapsed}
                 previewCollapsed={previewCollapsed}
@@ -626,6 +664,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                 editing={editing}
                 activeId={active?.id ?? null}
                 onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
+                onLoadOlder={loadOlder}
                 onToggleImages={toggleImages}
                 onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
                 onCancelEdit={() => setEditing(null)}

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -312,6 +313,11 @@ func (s *Server) checkTextOrDM(c *gin.Context, channelID, userID int64) (string,
 	return chType, chName, true
 }
 
+// messagePage is how many messages a page of history holds.
+const messagePage = 100
+
+// handleMessages returns a page of history, newest page by default. ?before=<id>
+// asks for the page just older than that message.
 func (s *Server) handleMessages(c *gin.Context) {
 	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -322,11 +328,16 @@ func (s *Server) handleMessages(c *gin.Context) {
 	if _, _, ok := s.checkTextOrDM(c, channelID, user.ID); !ok {
 		return
 	}
+	// Without a cursor, anything above every id: the newest page.
+	before, _ := strconv.ParseInt(c.Query("before"), 10, 64)
+	if before <= 0 {
+		before = math.MaxInt64
+	}
 	rows, err := s.db.Query(
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0), m.preview
 		 FROM messages m JOIN users u ON u.id = m.user_id
-		 WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 200`,
-		channelID,
+		 WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
+		channelID, before, messagePage+1,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
@@ -343,6 +354,11 @@ func (s *Server) handleMessages(c *gin.Context) {
 		}
 		m.Preview = decodePreview(preview.String)
 		messages = append(messages, m)
+	}
+	// The extra row only says whether another page exists.
+	hasMore := len(messages) > messagePage
+	if hasMore {
+		messages = messages[:messagePage]
 	}
 	// reverse to chronological order
 	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
@@ -376,7 +392,7 @@ func (s *Server) handleMessages(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(http.StatusOK, messages)
+	c.JSON(http.StatusOK, gin.H{"messages": messages, "hasMore": hasMore})
 }
 
 func (s *Server) messageReactions(msgID int64) map[string][]string {

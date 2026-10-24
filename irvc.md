@@ -76,6 +76,7 @@ read_state (user_id, channel_id, last_read_message_id, updated_at)
 
 - **Channels:** seeded (`#general` text, `general` voice, both permanent) plus on-demand 1-on-1 DMs opened by clicking a user. Text and voice channels can be created and deleted from the sidebar; permanent channels cannot be deleted, and a voice channel cannot be deleted while someone is in it. Ordered by `position`.
 - **Text:** GFM markdown; single newlines are hard breaks. Messages persist; live append over WS. Rendered as timestamp, author, content.
+- **History:** a channel opens on its newest 100 messages. Reaching the top shows a "load 100 more" button and nothing loads by itself; a loaded page keeps the reader looking at the same messages.
 - **Mentions:** `@username` highlights the message for that user; typing `@` opens an autocomplete.
 - **Unread:** `read_state` stores each user's last-read message per channel; `/channels` returns the count of newer messages by others. Opening a channel marks it read, so the count survives reload and is shared across devices.
 - **Commands:** `/me <action>` renders an emote as `* user action`; `/collapse` hides media in the current channel; `/gif [query]` opens a picker with the top Giphy results (trending when no query) to insert one. The gif picker is disabled without `IRVC_GIPHY_API_KEY`.
