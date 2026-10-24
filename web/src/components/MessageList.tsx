@@ -48,7 +48,7 @@ export default function MessageList({
   hidePreviews: boolean;
   editing: { id: number; body: string } | null;
   activeId: number | null;
-  onSelect: (msg: Message) => void;
+  onSelect: (msg: Message, anchor: HTMLElement) => void;
   onLoadOlder: () => void;
   onToggleImages: (id: number) => void;
   onTogglePreview: (id: number) => void;
@@ -160,7 +160,7 @@ export default function MessageList({
                 collapsed={collapsed.has(m.id)}
                 previewCollapsed={previewCollapsed(m.id)}
                 hidePreviews={hidePreviews}
-                onSelect={() => onSelect(m)}
+                onSelect={(anchor) => onSelect(m, anchor)}
                 onToggleImages={() => onToggleImages(m.id)}
                 onTogglePreview={() => onTogglePreview(m.id)}
                 onRemovePreview={m.username === username ? () => onRemovePreview(m) : undefined}
@@ -217,7 +217,7 @@ function Row({
   collapsed: boolean;
   previewCollapsed: boolean;
   hidePreviews: boolean;
-  onSelect: () => void;
+  onSelect: (anchor: HTMLElement) => void;
   onToggleImages: () => void;
   onTogglePreview: () => void;
   onRemovePreview?: () => void;
@@ -239,7 +239,6 @@ function Row({
     <IconButton
       label="message actions"
       size="sm"
-      data-actions-for={m.id}
       className={cn(
         "size-6 text-faint",
         active && "bg-raised text-fg",
@@ -248,7 +247,7 @@ function Row({
         // revealed on keyboard focus. Tapping the row works too.
         hidden && "pointer-events-none opacity-0 focus:pointer-events-auto focus:opacity-100",
       )}
-      onClick={onSelect}
+      onClick={(e) => onSelect(e.currentTarget)}
     >
       <MoreHorizontal size={14} />
     </IconButton>
@@ -275,7 +274,7 @@ function Row({
       onClick={(e) => {
         if (!window.getSelection()?.isCollapsed) return;
         if ((e.target as HTMLElement).closest("a,button,video")) return;
-        onSelect();
+        onSelect(e.currentTarget);
       }}
       className={cn(
         "group relative flex gap-2 px-3 py-0.5 md:px-4",
@@ -344,7 +343,7 @@ function Row({
                   key={key}
                   type="button"
                   title={who.join(", ")}
-                  onClick={onSelect}
+                  onClick={(e) => onSelect(e.currentTarget)}
                   className={cn("chip", who.includes(username) && "chip-active")}
                 >
                   <Icon className="size-3" />

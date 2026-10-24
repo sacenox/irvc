@@ -334,7 +334,7 @@ func (s *Server) handleMessages(c *gin.Context) {
 		before = math.MaxInt64
 	}
 	rows, err := s.db.Query(
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, COALESCE(m.edited_at, 0), m.preview
+		messageSelect+`
 		 FROM messages m JOIN users u ON u.id = m.user_id
 		 WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`,
 		channelID, before, messagePage+1,
@@ -344,16 +344,10 @@ func (s *Server) handleMessages(c *gin.Context) {
 		return
 	}
 	defer rows.Close()
-	messages := []Message{}
-	for rows.Next() {
-		var m Message
-		var preview sql.NullString
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &preview); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
-			return
-		}
-		m.Preview = decodePreview(preview.String)
-		messages = append(messages, m)
+	messages, err := scanMessages(rows)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
 	}
 	// The extra row only says whether another page exists.
 	hasMore := len(messages) > messagePage
@@ -364,35 +358,165 @@ func (s *Server) handleMessages(c *gin.Context) {
 	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 		messages[i], messages[j] = messages[j], messages[i]
 	}
-	if len(messages) > 0 {
-		byID := make(map[int64]*Message, len(messages))
-		for i := range messages {
-			byID[messages[i].ID] = &messages[i]
+	s.attachReactions(messages)
+	c.JSON(http.StatusOK, gin.H{"messages": messages, "hasMore": hasMore})
+}
+
+// handlePins lists a channel's pinned messages, oldest first, so the sidebar
+// reads like the channel itself.
+func (s *Server) handlePins(c *gin.Context) {
+	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad channel"})
+		return
+	}
+	user := c.MustGet("user").(User)
+	if _, _, ok := s.checkTextOrDM(c, channelID, user.ID); !ok {
+		return
+	}
+	rows, err := s.db.Query(
+		messageSelect+`
+		 FROM messages m
+		 JOIN users u ON u.id = m.user_id
+		 JOIN pins p ON p.message_id = m.id
+		 WHERE m.channel_id = ? ORDER BY m.id`,
+		channelID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	defer rows.Close()
+	messages, err := scanMessages(rows)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	s.attachReactions(messages)
+	c.JSON(http.StatusOK, messages)
+}
+
+// handlePinMessage pins a message so it stays reachable from the channel's
+// pinned sidebar even after it pages out of the history.
+func (s *Server) handlePinMessage(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad message"})
+		return
+	}
+	var channelID int64
+	if err := s.db.QueryRow(`SELECT channel_id FROM messages WHERE id = ?`, msgID).Scan(&channelID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
 		}
-		rRows, err := s.db.Query(
-			`SELECT r.message_id, r.reaction, u.username
-			 FROM reactions r JOIN users u ON u.id = r.user_id
-			 WHERE r.message_id >= ? AND r.message_id <= ?
-			 ORDER BY r.rowid`,
-			messages[0].ID, messages[len(messages)-1].ID,
-		)
-		if err == nil {
-			defer rRows.Close()
-			for rRows.Next() {
-				var mid int64
-				var react, uname string
-				if rRows.Scan(&mid, &react, &uname) == nil {
-					if m := byID[mid]; m != nil {
-						if m.Reactions == nil {
-							m.Reactions = map[string][]string{}
-						}
-						m.Reactions[react] = append(m.Reactions[react], uname)
-					}
+		return
+	}
+	user := c.MustGet("user").(User)
+	if _, _, ok := s.checkTextOrDM(c, channelID, user.ID); !ok {
+		return
+	}
+	m, chType, chName, ok := s.loadMessage(msgID, channelID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	if _, err := s.db.Exec(
+		`INSERT OR IGNORE INTO pins (message_id, channel_id, pinned_at) VALUES (?, ?, ?)`,
+		msgID, channelID, time.Now().Unix(),
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	s.notifyChannel(chType, chName, event{Type: "pin", Message: &m})
+	c.JSON(http.StatusOK, m)
+}
+
+func (s *Server) handleUnpinMessage(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad message"})
+		return
+	}
+	var m Message
+	if err := s.db.QueryRow(`SELECT channel_id FROM pins WHERE message_id = ?`, msgID).Scan(&m.ChannelID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "message not pinned"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		}
+		return
+	}
+	user := c.MustGet("user").(User)
+	chType, chName, ok := s.checkTextOrDM(c, m.ChannelID, user.ID)
+	if !ok {
+		return
+	}
+	if _, err := s.db.Exec(`DELETE FROM pins WHERE message_id = ?`, msgID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db"})
+		return
+	}
+	m.ID = msgID
+	s.notifyChannel(chType, chName, event{Type: "unpin", Message: &m})
+	c.Status(http.StatusNoContent)
+}
+
+// messageSelect is the column list every message read shares, in the order
+// scanMessages expects.
+const messageSelect = `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at,
+	COALESCE(m.edited_at, 0), m.preview`
+
+// scanMessages drains message rows, keeping the query's order.
+func scanMessages(rows *sql.Rows) ([]Message, error) {
+	messages := []Message{}
+	for rows.Next() {
+		var m Message
+		var preview sql.NullString
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &preview); err != nil {
+			return nil, err
+		}
+		m.Preview = decodePreview(preview.String)
+		messages = append(messages, m)
+	}
+	return messages, rows.Err()
+}
+
+// attachReactions fills in reactions for a whole page with one query, rather
+// than one per message.
+func (s *Server) attachReactions(msgs []Message) {
+	if len(msgs) == 0 {
+		return
+	}
+	byID := make(map[int64]*Message, len(msgs))
+	lo, hi := msgs[0].ID, msgs[0].ID
+	for i := range msgs {
+		byID[msgs[i].ID] = &msgs[i]
+		lo, hi = min(lo, msgs[i].ID), max(hi, msgs[i].ID)
+	}
+	rows, err := s.db.Query(
+		`SELECT r.message_id, r.reaction, u.username
+		 FROM reactions r JOIN users u ON u.id = r.user_id
+		 WHERE r.message_id >= ? AND r.message_id <= ?
+		 ORDER BY r.rowid`,
+		lo, hi,
+	)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mid int64
+		var react, uname string
+		if rows.Scan(&mid, &react, &uname) == nil {
+			if m := byID[mid]; m != nil {
+				if m.Reactions == nil {
+					m.Reactions = map[string][]string{}
 				}
+				m.Reactions[react] = append(m.Reactions[react], uname)
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"messages": messages, "hasMore": hasMore})
 }
 
 func (s *Server) messageReactions(msgID int64) map[string][]string {

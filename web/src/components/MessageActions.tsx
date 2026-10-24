@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EyeOff, Pencil, Trash2, X } from "lucide-react";
+import { EyeOff, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
 import { Button, IconButton } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { reactions } from "./MessageList";
@@ -8,20 +8,28 @@ import { reactions } from "./MessageList";
 // MessageActions is the contextual popover for the selected message: tap the ⋯
 // on any message (or the row) and the actions float beside it, reachable on
 // touch screens and by keyboard alike. It is portalled and positioned
-// absolutely, so opening it never reflows the message list; its right edge is
-// anchored to the message's ⋯ button.
+// absolutely, so opening it never reflows the message list. Its right edge is
+// anchored to the element that was acted on, given by the caller, so the same
+// message shown twice (the channel and the pinned sidebar) still opens the
+// popover where it was clicked.
 export default function MessageActions({
   message,
+  anchor,
   own,
+  pinned,
   onReact,
+  onPin,
   onEdit,
   onDelete,
   onRemovePreview,
   onClose,
 }: {
   message: Message;
+  anchor: HTMLElement;
   own: boolean;
+  pinned: boolean;
   onReact: (reaction: Reaction) => void;
+  onPin: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onRemovePreview: () => void;
@@ -30,11 +38,11 @@ export default function MessageActions({
   const panel = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  // Track the ⋯ button through list scrolling, resizes and relayouts.
+  // Track the anchor element through list scrolling, resizes and relayouts.
   useLayoutEffect(() => {
-    const anchor = document.querySelector<HTMLElement>(`[data-actions-for="${message.id}"]`);
-    if (!anchor) return;
     const place = () => {
+      // The row can vanish under us (someone else unpinned or deleted it).
+      if (!anchor.isConnected) return;
       const r = anchor.getBoundingClientRect();
       const p = panel.current!.getBoundingClientRect();
       let top = r.bottom + 4;
@@ -52,7 +60,7 @@ export default function MessageActions({
       removeEventListener("resize", place);
       ro.disconnect();
     };
-  }, [message.id, own]);
+  }, [anchor, own]);
 
   return createPortal(
     <div
@@ -77,6 +85,10 @@ export default function MessageActions({
           <Icon />
         </IconButton>
       ))}
+      <span className="mx-1 h-6 w-px bg-line" />
+      <Button size="sm" variant="ghost" onClick={onPin}>
+        {pinned ? <PinOff /> : <Pin />} {pinned ? "unpin" : "pin"}
+      </Button>
       {own && (
         <>
           <span className="mx-1 h-6 w-px bg-line" />

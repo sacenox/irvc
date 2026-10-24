@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, ScreenShare, Settings as SettingsIcon, Trash2, Video } from "lucide-react";
+import { AtSign, Hash, Menu, MoreHorizontal, PhoneOff, Pin, ScreenShare, Settings as SettingsIcon, Trash2, Video, X } from "lucide-react";
 import { cn } from "cn";
 import { Button, Centered, IconButton, Menu as MenuPrimitive, MenuItem } from "@/ui";
 import { api } from "../lib/api";
@@ -97,8 +97,21 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const [unread, setUnread] = useState<Record<number, number>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(loadCollapsed);
   const [previewState, setPreviewState] = useState<Record<number, boolean>>(loadPreviewState);
-  const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
-  const [active, setActive] = useState<Message | null>(null);
+  // The message being edited, and whether the pinned sidebar started it.
+  // Only that view shows the editor, so a message on screen twice never opens
+  // two textareas at once.
+  const [editing, setEditing] = useState<{ id: number; body: string; pane: boolean } | null>(null);
+  // The message whose actions are open, the element they are anchored to (the
+  // same message can be on screen twice), and the view they were opened from.
+  const [active, setActive] = useState<{
+    message: Message;
+    anchor: HTMLElement;
+    pane: boolean;
+  } | null>(null);
+  // Pinned messages of the channel on screen, and whether the pane showing
+  // them is open. Both only ever describe the selected channel.
+  const [pins, setPins] = useState<Message[]>([]);
+  const [showPins, setShowPins] = useState(false);
   const [voiceRooms, setVoiceRooms] = useState<Record<string, VoiceOccupant[]>>({});
   const [view, setView] = useState<"channel" | "settings">("channel");
   const [openShare, setOpenShare] = useState<string | null>(null);
@@ -165,6 +178,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         }));
       } else if (ev.type === "ring_end" && ev.channelId) {
         setRinging((r) => (r === ev.channelId ? null : r));
+      } else if ((ev.type === "pin" || ev.type === "unpin") && ev.message) {
+        const pinned = ev.message;
+        if (pinned.channelId !== selectedId.current) return;
+        // Pins read oldest first, like the channel they came from.
+        setPins((p) =>
+          ev.type === "pin"
+            ? [...p.filter((m) => m.id !== pinned.id), pinned].sort((a, b) => a.id - b.id)
+            : p.filter((m) => m.id !== pinned.id),
+        );
       } else if (ev.message) {
         if (ev.type === "message") {
           // A sent message ends that person's typing.
@@ -189,10 +211,13 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
         }
         if (ev.message.channelId === selectedId.current) {
           if (ev.type === "message") setMessages((prev) => [...prev, ev.message!]);
-          else if (ev.type === "message_edit")
+          else if (ev.type === "message_edit") {
             setMessages((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
-          else if (ev.type === "message_delete")
+            setPins((prev) => prev.map((m) => (m.id === ev.message!.id ? ev.message! : m)));
+          } else if (ev.type === "message_delete") {
             setMessages((prev) => prev.filter((m) => m.id !== ev.message!.id));
+            setPins((prev) => prev.filter((m) => m.id !== ev.message!.id));
+          }
         }
       }
     },
@@ -361,6 +386,22 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       .catch(() => {});
   }, [selected]);
 
+  // Pins are per channel and only matter for the one on screen: the header
+  // button and the pane both read this list. Asking for them here keeps the
+  // pane instant when it opens, and keeps the button honest about whether the
+  // channel has any.
+  useEffect(() => {
+    setPins([]);
+    setShowPins(false);
+    if (selected?.type !== "text" && selected?.type !== "dm") return;
+    const id = selected.id;
+    api<Message[]>(`/channels/${id}/pins`)
+      .then((p) => {
+        if (selectedId.current === id) setPins(p);
+      })
+      .catch(() => {});
+  }, [selected]);
+
   // loadOlder appends the page above the first loaded message. It only runs
   // when the reader asks for it, so a slow channel costs nothing to scroll.
   async function loadOlder() {
@@ -444,14 +485,27 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     }).catch(() => {});
   }
 
-  function startEdit(m: Message) {
-    setEditing({ id: m.id, body: m.body });
+  // The actions overlay pins and unpins with the same click. The server pushes
+  // the change back to every client, this one included.
+  function pinMessage(m: Message, pinned: boolean) {
+    api(`/messages/${m.id}/pin`, { method: pinned ? "DELETE" : "POST" }).catch((e: Error) =>
+      toast(e.message),
+    );
+  }
+
+  function togglePin(m: Message) {
+    setActive(null);
+    pinMessage(m, pins.some((p) => p.id === m.id));
+  }
+
+  function startEdit(m: Message, pane: boolean) {
+    setEditing({ id: m.id, body: m.body, pane });
     setActive(null);
   }
 
   function startEditLast() {
     const last = [...messages].reverse().find((m) => m.username === user.username);
-    if (last) setEditing({ id: last.id, body: last.body });
+    if (last) startEdit(last, false);
   }
 
   async function saveEdit() {
@@ -481,6 +535,12 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     );
     const cards = messages.filter((m) => m.preview?.kind === "card").map((m) => [m.id, true]);
     setPreviewState((prev) => ({ ...prev, ...Object.fromEntries(cards) }));
+  }
+
+  // openActions toggles the popover for the message acted on, remembering the
+  // row it came from so the popover lands next to it.
+  function openActions(m: Message, anchor: HTMLElement, pane: boolean) {
+    setActive((a) => (a?.message.id === m.id ? null : { message: m, anchor, pane }));
   }
 
   function deleteMessage(m: Message) {
@@ -609,32 +669,43 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
                   <Hash size={16} className="text-faint" />
                 ))}
               <span className="truncate text-sm font-medium">{selected?.name}</span>
-              {selected?.type === "dm" && (
-                <IconButton
-                  label={inCall ? "leave call" : ringing === selected.id ? "answer call" : "start video call"}
-                  variant={inCall ? "danger" : ringing === selected.id ? "primary" : "ghost"}
-                  size="sm"
-                  onClick={() => (inCall ? voice.leave() : startCall(selected))}
-                >
-                  {inCall ? <PhoneOff /> : <Video />}
-                </IconButton>
-              )}
-              {selected?.type === "text" && !selected.permanent && (
-                <MenuPrimitive
-                  className="ml-auto"
-                  trigger={
-                    <IconButton label="channel actions" size="sm">
-                      <MoreHorizontal />
-                    </IconButton>
-                  }
-                >
-                  {(close) => (
-                    <MenuItem danger onClick={() => (close(), deleteChannel(selected))}>
-                      <Trash2 size={14} /> delete channel
-                    </MenuItem>
-                  )}
-                </MenuPrimitive>
-              )}
+              <div className="ml-auto flex items-center gap-1">
+                {pins.length > 0 && (
+                  <IconButton
+                    label={showPins ? "hide pinned messages" : "show pinned messages"}
+                    variant={showPins ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => setShowPins((v) => !v)}
+                  >
+                    <Pin />
+                  </IconButton>
+                )}
+                {selected?.type === "dm" && (
+                  <IconButton
+                    label={inCall ? "leave call" : ringing === selected.id ? "answer call" : "start video call"}
+                    variant={inCall ? "danger" : ringing === selected.id ? "primary" : "ghost"}
+                    size="sm"
+                    onClick={() => (inCall ? voice.leave() : startCall(selected))}
+                  >
+                    {inCall ? <PhoneOff /> : <Video />}
+                  </IconButton>
+                )}
+                {selected?.type === "text" && !selected.permanent && (
+                  <MenuPrimitive
+                    trigger={
+                      <IconButton label="channel actions" size="sm">
+                        <MoreHorizontal />
+                      </IconButton>
+                    }
+                  >
+                    {(close) => (
+                      <MenuItem danger onClick={() => (close(), deleteChannel(selected))}>
+                        <Trash2 size={14} /> delete channel
+                      </MenuItem>
+                    )}
+                  </MenuPrimitive>
+                )}
+              </div>
             </>
           )}
           {!connected && <span className="ml-auto pr-1 text-xs text-faint">reconnecting…</span>}
@@ -647,53 +718,93 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
          ) : showingShare && share ? (
           <ScreenShareView track={share.track} />
         ) : chat && selected ? (
-          <>
-            {inCall && <CallView voice={voice} className="flex-[3]" />}
-            <div className={cn("flex min-h-0 flex-1 flex-col", inCall && "flex-[1] border-t border-line")}>
-              <MessageList
-                key={selected.id}
-                messages={messages}
-                hasMore={hasMore}
-                loadingOlder={loadingOlder}
-                username={user.username}
-                collapsed={collapsed}
-                previewCollapsed={previewCollapsed}
-                hidePreviews={settings.hidePreviews}
-                onTogglePreview={togglePreview}
-                onRemovePreview={removePreview}
-                editing={editing}
-                activeId={active?.id ?? null}
-                onSelect={(m) => setActive((a) => (a?.id === m.id ? null : m))}
-                onLoadOlder={loadOlder}
-                onToggleImages={toggleImages}
-                onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
-                onCancelEdit={() => setEditing(null)}
-                onSaveEdit={saveEdit}
-              />
-              <div className="h-5 shrink-0 truncate px-3 text-xs text-faint md:px-4" aria-live="polite">
-                {settings.typingIndicator &&
-                  typingLabel(Object.keys(typing[selected.id] ?? {}).sort())}
-              </div>
-              {active && !editing && (
-                <MessageActions
-                  message={active}
-                  own={active.username === user.username}
-                  onReact={(r) => react(active, r)}
-                  onEdit={() => startEdit(active)}
-                  onDelete={() => deleteMessage(active)}
-                  onRemovePreview={() => removePreview(active)}
-                  onClose={() => setActive(null)}
+          <div className="relative flex min-h-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-col">
+              {inCall && <CallView voice={voice} className="flex-[3]" />}
+              <div className={cn("flex min-h-0 flex-1 flex-col", inCall && "flex-[1] border-t border-line")}>
+                <MessageList
+                  key={selected.id}
+                  messages={messages}
+                  hasMore={hasMore}
+                  loadingOlder={loadingOlder}
+                  username={user.username}
+                  collapsed={collapsed}
+                  previewCollapsed={previewCollapsed}
+                  hidePreviews={settings.hidePreviews}
+                  onTogglePreview={togglePreview}
+                  onRemovePreview={removePreview}
+                  editing={editing?.pane ? null : editing}
+                  activeId={active?.message.id ?? null}
+                  onSelect={(m, anchor) => openActions(m, anchor, false)}
+                  onLoadOlder={loadOlder}
+                  onToggleImages={toggleImages}
+                  onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
+                  onCancelEdit={() => setEditing(null)}
+                  onSaveEdit={saveEdit}
                 />
-              )}
-              <Composer
-                channel={selected}
-                users={users}
-                onEditLast={startEditLast}
-                onTyping={sendTyping}
-                onCollapse={collapseAll}
-              />
+                <div className="h-5 shrink-0 truncate px-3 text-xs text-faint md:px-4" aria-live="polite">
+                  {settings.typingIndicator &&
+                    typingLabel(Object.keys(typing[selected.id] ?? {}).sort())}
+                </div>
+                {active && !editing && (
+                  <MessageActions
+                    message={active.message}
+                    anchor={active.anchor}
+                    own={active.message.username === user.username}
+                    pinned={pins.some((p) => p.id === active.message.id)}
+                    onReact={(r) => react(active.message, r)}
+                    onPin={() => togglePin(active.message)}
+                    onEdit={() => startEdit(active.message, active.pane)}
+                    onDelete={() => deleteMessage(active.message)}
+                    onRemovePreview={() => removePreview(active.message)}
+                    onClose={() => setActive(null)}
+                  />
+                )}
+                <Composer
+                  channel={selected}
+                  users={users}
+                  onEditLast={startEditLast}
+                  onTyping={sendTyping}
+                  onCollapse={collapseAll}
+                />
+              </div>
             </div>
-          </>
+            {showPins && pins.length > 0 && (
+              <aside className="flex w-72 shrink-0 flex-col border-l border-line bg-surface max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:w-full max-md:shadow-xl">
+                <div className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-2 md:px-3">
+                  <Pin size={16} className="text-faint" />
+                  <span className="truncate text-sm font-medium">pinned</span>
+                  <IconButton
+                    label="close pinned messages"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setShowPins(false)}
+                  >
+                    <X />
+                  </IconButton>
+                </div>
+                <MessageList
+                  messages={pins}
+                  hasMore={false}
+                  loadingOlder={false}
+                  username={user.username}
+                  collapsed={collapsed}
+                  previewCollapsed={previewCollapsed}
+                  hidePreviews={settings.hidePreviews}
+                  editing={editing?.pane ? editing : null}
+                  activeId={active?.message.id ?? null}
+                  onSelect={(m, anchor) => openActions(m, anchor, true)}
+                  onLoadOlder={() => {}}
+                  onToggleImages={toggleImages}
+                  onTogglePreview={togglePreview}
+                  onRemovePreview={removePreview}
+                  onEditBody={(body) => setEditing((e) => (e ? { ...e, body } : e))}
+                  onCancelEdit={() => setEditing(null)}
+                  onSaveEdit={saveEdit}
+                />
+              </aside>
+            )}
+          </div>
         ) : (
           <Centered>select a channel</Centered>
         )}

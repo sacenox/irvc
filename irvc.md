@@ -11,6 +11,7 @@ Small, private chat + voice for 4–6 people on one VPS. No data gathering, full
 **In:**
 - Server-side accounts, invite-only.
 - Text channels and 1-on-1 DMs with persisted history (IRC-like), GFM markdown, multiline compose, mentions, message editing and deletion.
+- Message history paged on demand, and pinned messages per channel in a sidebar.
 - Text and voice channels created and deleted from the sidebar; the seeded channels are permanent.
 - Image and video attachments, stored on disk.
 - Voice channels, ephemeral (not recorded), with mute, deafen, per-peer volume, mic processing, a level-based noise gate, and a join/leave tone.

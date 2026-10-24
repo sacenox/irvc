@@ -69,6 +69,8 @@ export interface WSEvent {
     | "channel_delete"
     | "ring"
     | "ring_end"
+    | "pin"
+    | "unpin"
     | "typing";
   message?: Message;
   users?: string[];
