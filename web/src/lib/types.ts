@@ -41,6 +41,11 @@ export interface Message {
   preview?: Preview;
 }
 
+export interface MessagePage {
+  messages: Message[];
+  hasMore: boolean;
+}
+
 export interface Gif {
   url: string;
   preview: string;
@@ -64,6 +69,8 @@ export interface WSEvent {
     | "channel_delete"
     | "ring"
     | "ring_end"
+    | "pin"
+    | "unpin"
     | "typing";
   message?: Message;
   users?: string[];
