@@ -121,6 +121,8 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
   const selectedId = useRef<number | null>(null);
   // The channel the messages in state came from.
   const loaded = useRef<number | null>(null);
+  // Set while a page request is in flight, so a fast scroll cannot ask twice.
+  const paging = useRef(false);
   // The channel of the DM call we started, so we can tell the peer when it ends.
   const rangRef = useRef<number | null>(null);
   // The server drops our voice state when the socket dies, so keep the last
@@ -374,6 +376,7 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
     // The channel the loaded messages belong to, so a click on the hint can
     // never page a channel that is not on screen.
     loaded.current = null;
+    paging.current = false;
     setHasMore(false);
     setLoadingOlder(false);
     api<MessagePage>(`/channels/${id}/messages`)
@@ -402,13 +405,15 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       .catch(() => {});
   }, [selected]);
 
-  // loadOlder appends the page above the first loaded message. It only runs
-  // when the reader asks for it, so a slow channel costs nothing to scroll.
+  // loadOlder appends the page above the first loaded message. Scrolling to the
+  // top calls it, and the guard keeps one scroll from fetching the same page
+  // twice before the first request lands.
   async function loadOlder() {
     const id = selected?.id;
     const before = messages[0]?.id;
-    if (id === undefined || before === undefined || loaded.current !== id || loadingOlder || !hasMore)
+    if (id === undefined || before === undefined || loaded.current !== id || paging.current || !hasMore)
       return;
+    paging.current = true;
     setLoadingOlder(true);
     try {
       const page = await api<MessagePage>(`/channels/${id}/messages?before=${before}`);
@@ -416,8 +421,9 @@ export default function Chat({ user, onLogout }: { user: User; onLogout: () => v
       setMessages((prev) => [...page.messages, ...prev]);
       setHasMore(page.hasMore);
     } catch {
-      // The hint stays put, so the reader can try again.
+      // The reader is still at the top, so a later scroll tries again.
     } finally {
+      paging.current = false;
       if (selectedId.current === id) setLoadingOlder(false);
     }
   }

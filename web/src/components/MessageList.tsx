@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef } from "react";
 import { Heart, Laugh, MoreHorizontal, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "cn";
-import { Button, IconButton, TextArea } from "@/ui";
+import { IconButton, TextArea } from "@/ui";
 import type { Message, Reaction } from "../lib/types";
 import { Time, dayKey, formatDay } from "../lib/time";
 import LinkPreview from "./LinkPreview";
@@ -14,6 +14,9 @@ export const reactions: { key: Reaction; label: string; Icon: typeof ThumbsUp }[
   { key: "heart", label: "like", Icon: Heart },
   { key: "laugh", label: "laugh", Icon: Laugh },
 ];
+
+// How close to the top, in pixels, counts as asking for the page above.
+const topZone = 200;
 
 // isMentioned reports whether body contains "@username" as a whole word.
 export function isMentioned(body: string, username: string) {
@@ -102,17 +105,34 @@ export default function MessageList({
     measure();
   });
 
+  // The reader reaching the top asks for the page above. Loading a page moves
+  // the reader down with the messages, so this only refires on a new scroll,
+  // or when a page was too short to fill the view.
+  const paging = useRef({ hasMore, loadingOlder, onLoadOlder });
+  paging.current = { hasMore, loadingOlder, onLoadOlder };
+
   useEffect(() => {
     const el = list.current;
     if (!el) return;
+    const loadOlder = () => {
+      const { hasMore, loadingOlder, onLoadOlder } = paging.current;
+      if (!hasMore || loadingOlder) return;
+      if (el.scrollTop > topZone && el.scrollHeight > el.clientHeight) return;
+      onLoadOlder();
+    };
     // Images load after the effect above, so follow the bottom on resize too.
-    const ro = new ResizeObserver(pin);
+    const ro = new ResizeObserver(() => {
+      pin();
+      loadOlder();
+    });
     ro.observe(el.firstElementChild ?? el);
     const onScroll = () => {
       // A scroll still sitting where we pinned is ours, so leave stick alone.
-      if (el.scrollTop === pinned.current) return;
-      stick.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
-      measure();
+      if (el.scrollTop !== pinned.current) {
+        stick.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+        measure();
+      }
+      loadOlder();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
@@ -127,12 +147,8 @@ export default function MessageList({
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2 [scrollbar-gutter:stable]"
     >
       <div>
-        {hasMore && (
-          <div className="flex justify-center px-3 py-2">
-            <Button size="sm" disabled={loadingOlder} onClick={onLoadOlder}>
-              {loadingOlder ? "loading…" : "load 100 more"}
-            </Button>
-          </div>
+        {loadingOlder && (
+          <div className="py-2 text-center text-[0.7rem] text-faint">loading older messages…</div>
         )}
         {messages.map((m, i) => {
           const prev = messages[i - 1];
